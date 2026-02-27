@@ -1,0 +1,15 @@
+Task 5 verification evidence
+
+Command:
+uv run --with pytest python -m pytest ../tests/test_stt_providers.py -v
+
+Result:
+- 5 tests collected
+- 5 tests passed
+
+Test cases:
+- test_registry_returns_groq_provider
+- test_registry_returns_siliconflow_provider
+- test_registry_raises_for_unknown_provider
+- test_groq_transcribe_uses_mocked_httpx
+- test_siliconflow_transcribe_uses_mocked_httpx
