@@ -19,6 +19,8 @@ class DeepgramSTTProvider(STTProvider):
         params: dict[str, str] = {"model": self._model}
         if language != "auto":
             params["language"] = language
+        else:
+            params["detect_language"] = "true"
 
         headers = {
             "Authorization": f"Token {self._api_key}",
