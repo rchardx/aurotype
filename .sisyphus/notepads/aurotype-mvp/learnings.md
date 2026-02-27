@@ -102,3 +102,11 @@ Ready for: STT pipeline integration testing in subsequent tasks.
 - Keeping `AudioRecorder` and `Settings` as module-level singletons in `server.py` makes recording state and provider config consistent across requests.
 - Pipeline orchestration is simplest as one async function (`process_voice_input`) that serially awaits STT then LLM and returns a two-field dict.
 - WSL/CI environments without PortAudio should map `/record/start` to HTTP 500 with the underlying `AudioDeviceError` message, while `/record/stop` remains safe/idempotent.
+
+## Task 10: Tauri ↔ Python Sidecar Process Bridge (2026-02-28)
+
+- Sidecar startup handshake is robust when the child process emits a single JSON line (`{"port": N}`) on stdout and Tauri blocks on first-line read before accepting requests.
+- Keeping sidecar runtime state in managed Tauri state (`Arc<Mutex<Option<u16>>>` + `Arc<Mutex<Option<Child>>>`) enables command handlers, health monitors, and shutdown hooks to coordinate cleanly.
+- A simple HTTP proxy surface (`sidecar_post` / `sidecar_get`) centralizes URL construction and HTTP error normalization for all commands.
+- Health supervision can stay lightweight: 5-second `/health` polls with a 3-failure threshold is enough to trigger kill+respawn recovery without introducing a full process manager.
+- Clean app exit behavior should be explicit: send SIGTERM first, wait briefly, then SIGKILL fallback to avoid orphan sidecar processes.
