@@ -1,0 +1,6 @@
+- Task 1 scaffolded with .
+- WSL non-sudo environment required local shims for  and  to complete Bun install and Tauri cargo check.
+- Python engine uses hatchling build backend and explicit  dependency.
+- Task 1 scaffolded with bun create tauri-app . --template react-ts --manager bun --yes --force --tauri-version 2.
+- WSL non-sudo environment required local shims for unzip and pkg-config to complete Bun install and Tauri cargo check.
+- Python engine uses hatchling build backend and explicit pydantic-settings dependency.
