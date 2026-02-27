@@ -12,7 +12,7 @@ class SiliconFlowSTTProvider(STTProvider):
     def __init__(self, config: _Config):
         self._api_key: str = config.siliconflow_api_key or ""
         self._url: Final[str] = "https://api.siliconflow.cn/v1/audio/transcriptions"
-        self._model: Final[str] = "openai/whisper-v3"
+        self._model: Final[str] = "FunAudioLLM/SenseVoiceSmall"
 
     @override
     async def transcribe(self, audio_bytes: bytes, language: str = "auto") -> str:
