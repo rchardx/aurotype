@@ -8,6 +8,7 @@ from .llm_base import LLMProvider, SYSTEM_PROMPT
 class SiliconFlowLLMProvider(LLMProvider):
     def __init__(self, config: "SiliconFlowConfig"):
         self._model: str = "deepseek-ai/DeepSeek-V3"
+        self._client: openai.AsyncOpenAI
         self._client = openai.AsyncOpenAI(
             api_key=config.siliconflow_api_key,
             base_url="https://api.siliconflow.cn/v1",

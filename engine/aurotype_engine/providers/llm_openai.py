@@ -8,6 +8,7 @@ from .llm_base import LLMProvider, SYSTEM_PROMPT
 class OpenAILLMProvider(LLMProvider):
     def __init__(self, config: "OpenAIConfig"):
         self._model: str = "gpt-4o-mini"
+        self._client: openai.AsyncOpenAI
         self._client = openai.AsyncOpenAI(api_key=config.openai_api_key, timeout=10.0)
 
     @override
