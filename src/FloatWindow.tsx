@@ -41,7 +41,7 @@ export default function FloatWindow() {
 
     const setupListener = async () => {
       unlisten = await listen<StateChangedPayload>('state-changed', (event) => {
-        console.log('State changed event:', event);
+
         const newState = event.payload.state as AppState;
         
         if (event.payload.message) {
@@ -87,17 +87,15 @@ export default function FloatWindow() {
       }
 
       if (newState === 'error') {
-        setTimeout(() => {
-           // Auto dismiss error after 3s
-           // We don't change state here locally, we rely on backend or just hide?
-           // The prompt says "auto-dismiss after 3s -> idle".
-           // Ideally the backend transitions to idle. 
-           // If the backend doesn't, we might desync.
-           // For UI purposes, let's just hide or let backend handle it.
-           // Prompt says: "Error: Red error text + auto-dismiss after 3s -> idle"
-           // I'll assume backend handles the transition to idle after error.
-           // If not, I'll force it.
-           // Actually, standard behavior is backend handles state.
+        setTimeout(async () => {
+          const w = getCurrentWindow();
+          await w.hide();
+          setAppState('idle');
+          setErrorMessage('');
+          setVolume(0);
+          setElapsed('0:00');
+          stopTimer();
+          stopVolumePolling();
         }, 3000);
       }
     }
