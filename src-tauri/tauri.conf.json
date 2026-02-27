@@ -13,8 +13,21 @@
     "windows": [
       {
         "title": "tauri-app",
+        "label": "main",
         "width": 800,
         "height": 600
+      },
+      {
+        "label": "float",
+        "url": "float.html",
+        "title": "",
+        "width": 300,
+        "height": 80,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "visible": false,
+        "focusable": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
