@@ -110,3 +110,11 @@ Ready for: STT pipeline integration testing in subsequent tasks.
 - A simple HTTP proxy surface (`sidecar_post` / `sidecar_get`) centralizes URL construction and HTTP error normalization for all commands.
 - Health supervision can stay lightweight: 5-second `/health` polls with a 3-failure threshold is enough to trigger kill+respawn recovery without introducing a full process manager.
 - Clean app exit behavior should be explicit: send SIGTERM first, wait briefly, then SIGKILL fallback to avoid orphan sidecar processes.
+
+## Task 13: E2E Integration (2026-02-28)
+
+- Hotkey-driven recording requires two async edges: start path (`/record/start`) should be spawned from the hotkey handler after transitioning to `Recording`, and stop path should transition to `Processing` then spawn a shared `run_pipeline` task.
+- A single Rust `run_pipeline(app)` function keeps stop behavior consistent across hotkey and command paths by centralizing `/record/stop` request handling, `polished_text` parsing, state transitions, and final text injection.
+- Runtime settings sync works reliably by reading `settings.json` via `tauri_plugin_store::StoreExt::store`, mapping UI keys to sidecar `/configure` keys, and posting null for empty API keys.
+- Sidecar runtime config is simplest with a module-level override dict merged with `get_settings()` defaults per request; every endpoint reads `get_effective_settings()` so `/configure` applies immediately without restart.
+- Upgrading `/record/stop` on the engine to run `process_voice_input` end-to-end returns `{raw_text, polished_text}` directly, which aligns with the Rust pipeline’s JSON parsing path.

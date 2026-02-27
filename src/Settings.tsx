@@ -56,6 +56,11 @@ export default function SettingsPage() {
     try {
       await store.set("config", newSettings);
       await store.save();
+      try {
+        await invoke("sync_settings");
+      } catch (e) {
+        console.error("Failed to sync settings to sidecar:", e);
+      }
     } catch (e) {
       console.error("Failed to save settings:", e);
     }

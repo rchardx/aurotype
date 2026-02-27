@@ -3,6 +3,7 @@ use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
 };
 
+use crate::{injection, sidecar};
 use crate::state::{AppState, AppStateManager, HotkeyMode};
 
 /// Default hotkey: CmdOrCtrl+Shift+Space
@@ -60,10 +61,10 @@ fn handle_main_hotkey(
             if shortcut_state == ShortcutState::Pressed {
                 match current {
                     AppState::Idle => {
-                        manager.transition(AppState::Recording, app);
+                        start_recording(manager, app);
                     }
                     AppState::Recording => {
-                        manager.transition(AppState::Processing, app);
+                        stop_recording(manager, app);
                     }
                     // Ignore hotkey in other states
                     _ => {}
@@ -74,17 +75,41 @@ fn handle_main_hotkey(
             match shortcut_state {
                 ShortcutState::Pressed => {
                     if current == AppState::Idle {
-                        manager.transition(AppState::Recording, app);
+                        start_recording(manager, app);
                     }
                 }
                 ShortcutState::Released => {
                     if current == AppState::Recording {
-                        manager.transition(AppState::Processing, app);
+                        stop_recording(manager, app);
                     }
                 }
             }
         }
     }
+}
+
+fn start_recording(manager: &AppStateManager, app: &AppHandle) {
+    let _ = injection::capture_foreground_window();
+    manager.transition(AppState::Recording, app);
+
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        let sidecar_state = app_clone.state::<sidecar::SidecarState>();
+        if let Err(err) = sidecar::sidecar_post(&sidecar_state, "/record/start", serde_json::json!({})).await {
+            let state_mgr = app_clone.state::<AppStateManager>();
+            state_mgr.transition(AppState::Error(format!("Failed to start recording: {err}")), &app_clone);
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            state_mgr.transition(AppState::Idle, &app_clone);
+        }
+    });
+}
+
+fn stop_recording(manager: &AppStateManager, app: &AppHandle) {
+    manager.transition(AppState::Processing, app);
+    let app_clone = app.clone();
+    tokio::spawn(async move {
+        crate::run_pipeline(app_clone).await;
+    });
 }
 
 /// Handle Escape key: cancel recording and return to idle.

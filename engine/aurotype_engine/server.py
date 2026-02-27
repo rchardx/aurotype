@@ -7,18 +7,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .audio import AudioDeviceError, AudioRecorder
-from .config import get_settings
+from .config import Settings, get_settings
 from .pipeline import process_voice_input
 from .providers.llm_registry import get_llm_provider
 from .providers.stt_registry import get_stt_provider
 
 app = FastAPI()
 recorder = AudioRecorder()
-settings = get_settings()
+_config_overrides: dict[str, str | None] = {}
+
+
+def get_effective_settings() -> Settings:
+    base = get_settings()
+    overrides = {k: v for k, v in _config_overrides.items() if v is not None}
+    return base.model_copy(update=overrides)
 
 
 class PolishRequest(BaseModel):
     text: str
+
+
+class ConfigureRequest(BaseModel):
+    stt_provider: str | None = None
+    groq_api_key: str | None = None
+    llm_provider: str | None = None
+    openai_api_key: str | None = None
+    siliconflow_api_key: str | None = None
+    language: str | None = None
 
 
 # Configure CORS for localhost and Tauri
@@ -44,22 +59,31 @@ async def health():
 @app.post("/transcribe")
 async def transcribe(audio: Annotated[UploadFile, File(...)]):
     audio_bytes = await audio.read()
-    stt = get_stt_provider(settings.stt_provider, settings)
-    text = await stt.transcribe(audio_bytes, language=settings.language)
+    cfg = get_effective_settings()
+    stt = get_stt_provider(cfg.stt_provider, cfg)
+    text = await stt.transcribe(audio_bytes, language=cfg.language)
     return {"text": text}
 
 
 @app.post("/polish")
 async def polish(payload: PolishRequest):
-    llm = get_llm_provider(settings.llm_provider, settings)
-    text = await llm.polish(payload.text, language=settings.language)
+    cfg = get_effective_settings()
+    llm = get_llm_provider(cfg.llm_provider, cfg)
+    text = await llm.polish(payload.text, language=cfg.language)
     return {"text": text}
 
 
 @app.post("/process")
 async def process(audio: Annotated[UploadFile, File(...)]):
     audio_bytes = await audio.read()
-    return await process_voice_input(audio_bytes, settings)
+    cfg = get_effective_settings()
+    return await process_voice_input(audio_bytes, cfg)
+
+
+@app.post("/configure")
+async def configure(payload: ConfigureRequest):
+    _config_overrides.update(payload.model_dump())
+    return {"status": "configured"}
 
 
 @app.post("/record/start")
@@ -73,8 +97,13 @@ async def start_recording():
 
 @app.post("/record/stop")
 async def stop_recording():
-    recorder.stop_recording()
-    return {"status": "stopped"}
+    try:
+        audio_bytes = recorder.stop_recording()
+    except AudioDeviceError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    cfg = get_effective_settings()
+    return await process_voice_input(audio_bytes, cfg)
 
 
 @app.get("/volume")

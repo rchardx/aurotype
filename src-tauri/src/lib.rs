@@ -6,6 +6,106 @@ mod tray;
 
 use state::{AppState, AppStateManager};
 use tauri::Manager;
+use tauri_plugin_store::StoreExt;
+
+pub async fn run_pipeline(app: tauri::AppHandle) {
+    use std::time::Duration;
+
+    let sidecar = app.state::<sidecar::SidecarState>();
+    let state_mgr = app.state::<AppStateManager>();
+
+    match sidecar::sidecar_post(&sidecar, "/record/stop", serde_json::json!({})).await {
+        Ok(response_text) => {
+            let polished = serde_json::from_str::<serde_json::Value>(&response_text)
+                .ok()
+                .and_then(|v| v["polished_text"].as_str().map(str::to_string))
+                .unwrap_or_default();
+
+            if polished.is_empty() {
+                state_mgr.transition(AppState::Error("No text transcribed".to_string()), &app);
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                state_mgr.transition(AppState::Idle, &app);
+                return;
+            }
+
+            state_mgr.transition(AppState::Injecting, &app);
+            if let Err(e) = injection::inject_text(&polished) {
+                state_mgr.transition(AppState::Error(format!("Injection failed: {e}")), &app);
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                state_mgr.transition(AppState::Idle, &app);
+                return;
+            }
+
+            state_mgr.transition(AppState::Idle, &app);
+        }
+        Err(e) => {
+            state_mgr.transition(AppState::Error(format!("Pipeline failed: {e}")), &app);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            state_mgr.transition(AppState::Idle, &app);
+        }
+    }
+}
+
+async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
+    let store = app
+        .store("settings.json")
+        .map_err(|e| format!("store error: {e}"))?;
+
+    let Some(config) = store.get("config") else {
+        return Ok(());
+    };
+
+    let stt_provider = config
+        .get("stt_provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("groq");
+    let stt_api_key = config
+        .get("stt_api_key")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let llm_provider = config
+        .get("llm_provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or("openai");
+    let llm_api_key = config
+        .get("llm_api_key")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let language = config
+        .get("language")
+        .and_then(|v| v.as_str())
+        .unwrap_or("auto");
+
+    let mut groq_api_key = String::new();
+    let mut openai_api_key = String::new();
+    let mut siliconflow_api_key = String::new();
+
+    match stt_provider {
+        "groq" => groq_api_key = stt_api_key.to_string(),
+        "siliconflow" => siliconflow_api_key = stt_api_key.to_string(),
+        _ => {}
+    }
+
+    match llm_provider {
+        "openai" => openai_api_key = llm_api_key.to_string(),
+        "siliconflow" => siliconflow_api_key = llm_api_key.to_string(),
+        _ => {}
+    }
+
+    let body = serde_json::json!({
+        "stt_provider": stt_provider,
+        "groq_api_key": if groq_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(groq_api_key) },
+        "llm_provider": llm_provider,
+        "openai_api_key": if openai_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(openai_api_key) },
+        "siliconflow_api_key": if siliconflow_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(siliconflow_api_key) },
+        "language": language,
+    });
+
+    let sidecar = app.state::<sidecar::SidecarState>();
+    sidecar::sidecar_post(&sidecar, "/configure", body).await?;
+
+    Ok(())
+}
 
 #[tauri::command]
 fn get_state(state: tauri::State<AppStateManager>) -> String {
@@ -26,6 +126,8 @@ async fn start_recording(
         ));
     }
 
+    let _ = injection::capture_foreground_window();
+
     sidecar::sidecar_post(&sidecar, "/record/start", serde_json::json!({})).await?;
     state.transition(AppState::Recording, &app);
     Ok(())
@@ -35,7 +137,6 @@ async fn start_recording(
 async fn stop_recording(
     state: tauri::State<'_, AppStateManager>,
     app: tauri::AppHandle,
-    sidecar: tauri::State<'_, sidecar::SidecarState>,
 ) -> Result<String, String> {
     let current = state.get();
     if current != AppState::Recording {
@@ -45,9 +146,14 @@ async fn stop_recording(
         ));
     }
 
-    let response = sidecar::sidecar_post(&sidecar, "/record/stop", serde_json::json!({})).await?;
     state.transition(AppState::Processing, &app);
-    Ok(response)
+    run_pipeline(app).await;
+    Ok("processed".to_string())
+}
+
+#[tauri::command]
+async fn sync_settings(app: tauri::AppHandle) -> Result<(), String> {
+    sync_settings_internal(&app).await
 }
 
 #[tauri::command]
@@ -74,6 +180,7 @@ pub fn run() {
             get_state,
             start_recording,
             stop_recording,
+            sync_settings,
             cancel,
             sidecar::get_health,
             injection::inject_text_at_cursor,
@@ -82,6 +189,12 @@ pub fn run() {
             let sidecar_state = sidecar::spawn_sidecar(app.handle().clone())
                 .map_err(|err| std::io::Error::other(format!("failed to spawn sidecar: {err}")))?;
             app.manage(sidecar_state);
+
+            let sync_handle = app.handle().clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let _ = sync_settings_internal(&sync_handle).await;
+            });
 
             #[cfg(desktop)]
             {
