@@ -139,6 +139,9 @@ fn start_health_check_loop(app: AppHandle, state: SidecarState) {
                     consecutive_failures = consecutive_failures.saturating_add(1);
 
                     if consecutive_failures >= 3 {
+                        eprintln!(
+                            "[aurotype] Sidecar health check failed {consecutive_failures} times, respawning..."
+                        );
                         let _ = app.emit(
                             "sidecar-restarting",
                             serde_json::json!({ "reason": err, "failures": consecutive_failures }),

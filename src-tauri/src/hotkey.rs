@@ -97,7 +97,17 @@ fn start_recording(manager: &AppStateManager, app: &AppHandle) {
         let sidecar_state = app_clone.state::<sidecar::SidecarState>();
         if let Err(err) = sidecar::sidecar_post(&sidecar_state, "/record/start", serde_json::json!({})).await {
             let state_mgr = app_clone.state::<AppStateManager>();
-            state_mgr.transition(AppState::Error(format!("Failed to start recording: {err}")), &app_clone);
+            eprintln!("[aurotype] Failed to start recording: {err}");
+            let err_lower = err.to_lowercase();
+            let error_msg = if err_lower.contains("audiodeviceerror")
+                || err_lower.contains("no default input device")
+                || err_lower.contains("audio")
+            {
+                "No microphone found".to_string()
+            } else {
+                format!("Failed to start recording: {err}")
+            };
+            state_mgr.transition(AppState::Error(error_msg), &app_clone);
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app_clone);
         }
@@ -115,7 +125,23 @@ fn stop_recording(manager: &AppStateManager, app: &AppHandle) {
 /// Handle Escape key: cancel recording and return to idle.
 fn handle_escape(manager: &AppStateManager, app: &AppHandle) {
     let current = manager.get();
-    if current == AppState::Recording {
-        manager.transition(AppState::Idle, app);
+    match current {
+        AppState::Recording => {
+            manager.transition(AppState::Idle, app);
+            let app_clone = app.clone();
+            tokio::spawn(async move {
+                let sidecar_state = app_clone.state::<sidecar::SidecarState>();
+                if let Err(err) =
+                    sidecar::sidecar_post(&sidecar_state, "/record/cancel", serde_json::json!({}))
+                        .await
+                {
+                    eprintln!("[aurotype] Failed to cancel recording: {err}");
+                }
+            });
+        }
+        AppState::Processing => {
+            manager.transition(AppState::Idle, app);
+        }
+        _ => {}
     }
 }

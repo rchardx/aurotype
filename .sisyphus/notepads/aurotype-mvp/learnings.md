@@ -118,3 +118,11 @@ Ready for: STT pipeline integration testing in subsequent tasks.
 - Runtime settings sync works reliably by reading `settings.json` via `tauri_plugin_store::StoreExt::store`, mapping UI keys to sidecar `/configure` keys, and posting null for empty API keys.
 - Sidecar runtime config is simplest with a module-level override dict merged with `get_settings()` defaults per request; every endpoint reads `get_effective_settings()` so `/configure` applies immediately without restart.
 - Upgrading `/record/stop` on the engine to run `process_voice_input` end-to-end returns `{raw_text, polished_text}` directly, which aligns with the Rust pipeline’s JSON parsing path.
+
+## Task 14: Error Handling and Recovery (2026-02-28)
+
+- Wrapping the sidecar `/record/stop` call in `tokio::time::timeout(Duration::from_secs(10), ...)` gives deterministic UX recovery (`Error("Request timed out")` -> auto return to `Idle`) when the pipeline stalls.
+- Escape cancel behavior needs split handling: during `Recording`, transition to `Idle` and fire `/record/cancel` to discard buffered audio; during `Processing`, transition to `Idle` and let `run_pipeline` ignore late results via state guard.
+- A pre-injection state check in `run_pipeline` is sufficient MVP cancellation control for in-flight HTTP work that cannot be truly aborted.
+- Sidecar crash recovery can rely on existing health-check respawn loop; adding explicit respawn `eprintln!` improves observability when mid-request failures occur.
+- Mapping `/record/start` audio-device failures to a user-facing "No microphone found" message keeps float window errors actionable, while preserving detailed error logs in Rust/Python console output.

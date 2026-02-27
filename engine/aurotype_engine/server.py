@@ -100,10 +100,24 @@ async def stop_recording():
     try:
         audio_bytes = recorder.stop_recording()
     except AudioDeviceError as exc:
+        print(f"[aurotype] Audio device error in /record/stop: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     cfg = get_effective_settings()
-    return await process_voice_input(audio_bytes, cfg)
+    try:
+        return await process_voice_input(audio_bytes, cfg)
+    except Exception as exc:
+        print(f"[aurotype] Pipeline error in /record/stop: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/record/cancel")
+async def cancel_recording():
+    try:
+        _ = recorder.stop_recording()
+    except AudioDeviceError:
+        pass
+    return {"status": "cancelled"}
 
 
 @app.get("/volume")

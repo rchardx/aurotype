@@ -10,12 +10,31 @@ use tauri_plugin_store::StoreExt;
 
 pub async fn run_pipeline(app: tauri::AppHandle) {
     use std::time::Duration;
+    use tokio::time::timeout;
 
     let sidecar = app.state::<sidecar::SidecarState>();
     let state_mgr = app.state::<AppStateManager>();
 
-    match sidecar::sidecar_post(&sidecar, "/record/stop", serde_json::json!({})).await {
-        Ok(response_text) => {
+    let result = timeout(
+        Duration::from_secs(10),
+        sidecar::sidecar_post(&sidecar, "/record/stop", serde_json::json!({})),
+    )
+    .await;
+
+    match result {
+        Err(_elapsed) => {
+            eprintln!("[aurotype] Pipeline timeout: /record/stop exceeded 10s");
+            state_mgr.transition(AppState::Error("Request timed out".to_string()), &app);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            state_mgr.transition(AppState::Idle, &app);
+        }
+        Ok(Err(e)) => {
+            eprintln!("[aurotype] Pipeline error: {e}");
+            state_mgr.transition(AppState::Error(format!("Pipeline failed: {e}")), &app);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            state_mgr.transition(AppState::Idle, &app);
+        }
+        Ok(Ok(response_text)) => {
             let polished = serde_json::from_str::<serde_json::Value>(&response_text)
                 .ok()
                 .and_then(|v| v["polished_text"].as_str().map(str::to_string))
@@ -28,19 +47,27 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 return;
             }
 
+            let current_state = state_mgr.get();
+            if current_state == AppState::Idle {
+                eprintln!("[aurotype] Pipeline result ignored: request was cancelled");
+                return;
+            }
+
             state_mgr.transition(AppState::Injecting, &app);
+            let current_state = state_mgr.get();
+            if current_state == AppState::Idle {
+                eprintln!("[aurotype] Injection skipped: request was cancelled");
+                return;
+            }
+
             if let Err(e) = injection::inject_text(&polished) {
+                eprintln!("[aurotype] Injection error: {e}");
                 state_mgr.transition(AppState::Error(format!("Injection failed: {e}")), &app);
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 state_mgr.transition(AppState::Idle, &app);
                 return;
             }
 
-            state_mgr.transition(AppState::Idle, &app);
-        }
-        Err(e) => {
-            state_mgr.transition(AppState::Error(format!("Pipeline failed: {e}")), &app);
-            tokio::time::sleep(Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app);
         }
     }
