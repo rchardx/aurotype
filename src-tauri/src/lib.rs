@@ -85,7 +85,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let stt_provider = config
         .get("stt_provider")
         .and_then(|v| v.as_str())
-        .unwrap_or("groq");
+        .unwrap_or("deepgram");
     let stt_api_key = config
         .get("stt_api_key")
         .and_then(|v| v.as_str())
@@ -103,12 +103,12 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         .and_then(|v| v.as_str())
         .unwrap_or("auto");
 
-    let mut groq_api_key = String::new();
+    let mut deepgram_api_key = String::new();
     let mut openai_api_key = String::new();
     let mut siliconflow_api_key = String::new();
 
     match stt_provider {
-        "groq" => groq_api_key = stt_api_key.to_string(),
+        "deepgram" => deepgram_api_key = stt_api_key.to_string(),
         "siliconflow" => siliconflow_api_key = stt_api_key.to_string(),
         _ => {}
     }
@@ -121,7 +121,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
 
     let body = serde_json::json!({
         "stt_provider": stt_provider,
-        "groq_api_key": if groq_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(groq_api_key) },
+        "deepgram_api_key": if deepgram_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(deepgram_api_key) },
         "llm_provider": llm_provider,
         "openai_api_key": if openai_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(openai_api_key) },
         "siliconflow_api_key": if siliconflow_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(siliconflow_api_key) },

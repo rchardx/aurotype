@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 STTProvider = getattr(
     import_module("aurotype_engine.providers.stt_base"), "STTProvider"
 )
-GroqSTTProvider = getattr(
-    import_module("aurotype_engine.providers.stt_groq"), "GroqSTTProvider"
+DeepgramSTTProvider = getattr(
+    import_module("aurotype_engine.providers.stt_deepgram"), "DeepgramSTTProvider"
 )
 SiliconFlowSTTProvider = getattr(
     import_module("aurotype_engine.providers.stt_siliconflow"), "SiliconFlowSTTProvider"
@@ -18,7 +18,7 @@ get_stt_provider = getattr(
 
 
 def _build_config() -> SimpleNamespace:
-    return SimpleNamespace(groq_api_key="groq-key", siliconflow_api_key="sf-key")
+    return SimpleNamespace(deepgram_api_key="dg-key", siliconflow_api_key="sf-key")
 
 
 def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
@@ -31,9 +31,9 @@ def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
     return mock_client, mock_cm
 
 
-def test_registry_returns_groq_provider() -> None:
-    provider = get_stt_provider("groq", _build_config())
-    assert isinstance(provider, GroqSTTProvider)
+def test_registry_returns_deepgram_provider() -> None:
+    provider = get_stt_provider("deepgram", _build_config())
+    assert isinstance(provider, DeepgramSTTProvider)
     assert isinstance(provider, STTProvider)
 
 
@@ -46,7 +46,7 @@ def test_registry_returns_siliconflow_provider() -> None:
 def test_registry_raises_for_unknown_provider() -> None:
     with patch(
         "aurotype_engine.providers.stt_registry.STT_PROVIDER_REGISTRY",
-        {"groq": GroqSTTProvider},
+        {"deepgram": DeepgramSTTProvider},
     ):
         try:
             get_stt_provider("unknown", _build_config())
@@ -55,21 +55,23 @@ def test_registry_raises_for_unknown_provider() -> None:
             assert str(exc) == "Unknown STT provider: unknown"
 
 
-def test_groq_transcribe_uses_mocked_httpx() -> None:
+def test_deepgram_transcribe_uses_mocked_httpx() -> None:
     response = MagicMock()
     response.status_code = 200
-    response.json.return_value = {"text": "hello world"}
+    response.json.return_value = {
+        "results": {"channels": [{"alternatives": [{"transcript": "hello world"}]}]}
+    }
 
     mock_client, mock_cm = _mock_async_client(response)
 
     with patch(
-        "aurotype_engine.providers.stt_groq.httpx.AsyncClient", return_value=mock_cm
+        "aurotype_engine.providers.stt_deepgram.httpx.AsyncClient", return_value=mock_cm
     ) as client_cls:
-        provider = GroqSTTProvider(_build_config())
+        provider = DeepgramSTTProvider(_build_config())
         text = asyncio.run(provider.transcribe(b"wav-bytes", language="en"))
 
     assert text == "hello world"
-    client_cls.assert_called_once_with(timeout=10.0)
+    client_cls.assert_called_once_with(timeout=30.0)
     mock_client.post.assert_awaited_once()
 
 

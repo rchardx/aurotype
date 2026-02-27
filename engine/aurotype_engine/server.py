@@ -29,7 +29,7 @@ class PolishRequest(BaseModel):
 
 class ConfigureRequest(BaseModel):
     stt_provider: str | None = None
-    groq_api_key: str | None = None
+    deepgram_api_key: str | None = None
     llm_provider: str | None = None
     openai_api_key: str | None = None
     siliconflow_api_key: str | None = None

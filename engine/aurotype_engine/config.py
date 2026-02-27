@@ -7,9 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Load configuration from environment variables with AUROTYPE_ prefix."""
 
-    stt_provider: str = "groq"
+    stt_provider: str = "deepgram"
     llm_provider: str = "openai"
-    groq_api_key: Optional[str] = None
+    deepgram_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
     language: str = "auto"

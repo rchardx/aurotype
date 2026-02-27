@@ -17,7 +17,7 @@ interface SettingsData {
 }
 
 const defaultSettings: SettingsData = {
-  stt_provider: "groq",
+  stt_provider: "deepgram",
   stt_api_key: "",
   llm_provider: "openai",
   llm_api_key: "",
@@ -116,7 +116,7 @@ export default function SettingsPage() {
             value={settings.stt_provider}
             onChange={(e) => handleChange("stt_provider", e.target.value)}
           >
-            <option value="groq">Groq (Default)</option>
+            <option value="deepgram">Deepgram (Default)</option>
             <option value="siliconflow">SiliconFlow</option>
           </select>
         </div>
