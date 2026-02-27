@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import math
 import threading
 import wave
 from typing import ClassVar, Protocol, cast
@@ -116,13 +115,8 @@ class AudioRecorder:
         if latest is None or latest.size == 0:
             return 0.0
 
-        samples = cast(list[int], latest.tolist())
-        sum_squares = 0.0
-        for sample in samples:
-            sample_f = float(sample)
-            sum_squares += sample_f * sample_f
-
-        rms = math.sqrt(sum_squares / float(len(samples))) / 32768.0
+        chunk_f32: NDArray[np.float32] = latest.astype(np.float32)
+        rms = float(cast(float, np.sqrt(np.mean(chunk_f32 * chunk_f32)) / 32768.0))
         if rms < 0.0:
             return 0.0
         if rms > 1.0:
