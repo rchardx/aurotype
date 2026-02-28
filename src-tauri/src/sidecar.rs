@@ -1,16 +1,24 @@
 use reqwest::Client;
 use serde_json::Value;
-use std::error::Error;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+#[cfg(not(feature = "dev-sidecar"))]
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+#[cfg(not(feature = "dev-sidecar"))]
+use tauri_plugin_shell::ShellExt;
+
+/// Wrapper so both dev (std::process::Child) and release (CommandChild) can be stored.
+#[cfg(not(feature = "dev-sidecar"))]
+type ChildHandle = CommandChild;
+#[cfg(feature = "dev-sidecar")]
+type ChildHandle = std::process::Child;
+
 #[derive(Clone)]
 pub struct SidecarState {
     pub port: Arc<Mutex<Option<u16>>>,
-    pub child: Arc<Mutex<Option<Child>>>,
+    pub child: Arc<Mutex<Option<ChildHandle>>>,
     pub client: Client,
 }
 
@@ -24,16 +32,112 @@ impl SidecarState {
     }
 }
 
-pub fn spawn_sidecar(app: AppHandle) -> Result<SidecarState, Box<dyn Error>> {
+pub fn spawn_sidecar(app: AppHandle) -> Result<SidecarState, Box<dyn std::error::Error>> {
     let state = SidecarState::new();
-    start_sidecar_process(&state)?;
+    start_sidecar_process(&app, &state)?;
     start_health_check_loop(app, state.clone());
     Ok(state)
 }
 
-fn start_sidecar_process(state: &SidecarState) -> Result<(), Box<dyn Error>> {
+// ---------------------------------------------------------------------------
+// Release mode: use Tauri shell plugin sidecar API
+// ---------------------------------------------------------------------------
+#[cfg(not(feature = "dev-sidecar"))]
+fn start_sidecar_process(
+    app: &AppHandle,
+    state: &SidecarState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (mut rx, child) = app
+        .shell()
+        .sidecar("aurotype-engine")
+        .map_err(|err| format!("failed to create sidecar command: {err}"))?
+        .spawn()
+        .map_err(|err| format!("failed to spawn sidecar: {err}"))?;
+
+    // Use a oneshot channel to receive the port from the async stdout reader.
+    // This bridges the sync setup() context with the async sidecar output.
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
+
+    let port_arc = state.port.clone();
+    tokio::spawn(async move {
+        let mut port_tx = Some(port_tx);
+
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line_bytes) => {
+                    let line = String::from_utf8_lossy(&line_bytes);
+                    let line = line.trim();
+
+                    // Try to parse the handshake JSON: {"port": N}
+                    if let Some(tx) = port_tx.take() {
+                        if let Ok(parsed) = serde_json::from_str::<Value>(line) {
+                            if let Some(port) = parsed.get("port").and_then(Value::as_u64) {
+                                if let Ok(p) = u16::try_from(port) {
+                                    let mut guard = port_arc.lock().unwrap();
+                                    *guard = Some(p);
+                                    let _ = tx.send(p);
+                                    continue;
+                                }
+                            }
+                        }
+                        eprintln!(
+                            "[aurotype] Unexpected sidecar stdout before handshake: {line}"
+                        );
+                        port_tx = Some(tx);
+                    }
+                }
+                CommandEvent::Stderr(line_bytes) => {
+                    let line = String::from_utf8_lossy(&line_bytes);
+                    eprint!("[aurotype engine] {line}");
+                }
+                CommandEvent::Terminated(payload) => {
+                    eprintln!(
+                        "[aurotype] Sidecar terminated: code={:?} signal={:?}",
+                        payload.code, payload.signal
+                    );
+                    // If we never got the port, drop the sender so the receiver errors
+                    drop(port_tx.take());
+                    break;
+                }
+                CommandEvent::Error(err) => {
+                    eprintln!("[aurotype] Sidecar stream error: {err}");
+                }
+                _ => {}
+            }
+        }
+    });
+
+    // Block on the oneshot receiver with a timeout to get the port synchronously
+    let port = tauri::async_runtime::block_on(async {
+        tokio::time::timeout(Duration::from_secs(15), port_rx).await
+    })
+    .map_err(|_| "timed out waiting for sidecar handshake (15s)")?
+    .map_err(|_| "sidecar exited before emitting port")?;
+
+    eprintln!("[aurotype] Sidecar started on port {port}");
+
+    {
+        let mut child_guard = state.child.lock().unwrap();
+        *child_guard = Some(child);
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Dev mode: spawn Python engine via `uv run` directly (no sidecar binary needed)
+// ---------------------------------------------------------------------------
+#[cfg(feature = "dev-sidecar")]
+fn start_sidecar_process(
+    _app: &AppHandle,
+    state: &SidecarState,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+
     let mut child = Command::new("uv")
         .args(["run", "python", "-m", "aurotype_engine"])
+        .current_dir("../engine")
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()?;
@@ -55,6 +159,8 @@ fn start_sidecar_process(state: &SidecarState) -> Result<(), Box<dyn Error>> {
     let port = u16::try_from(raw_port)
         .map_err(|_| std::io::Error::other("sidecar port out of range"))?;
 
+    eprintln!("[aurotype] Sidecar (dev) started on port {port}");
+
     {
         let mut port_guard = state.port.lock().unwrap();
         *port_guard = Some(port);
@@ -66,6 +172,10 @@ fn start_sidecar_process(state: &SidecarState) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// HTTP communication (shared between dev & release)
+// ---------------------------------------------------------------------------
 
 pub async fn sidecar_post(state: &SidecarState, path: &str, body: Value) -> Result<String, String> {
     let port = get_sidecar_port(state)?;
@@ -124,6 +234,10 @@ fn get_sidecar_port(state: &SidecarState) -> Result<u16, String> {
         .ok_or_else(|| "sidecar port not initialized".to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Health check, respawn, shutdown
+// ---------------------------------------------------------------------------
+
 fn start_health_check_loop(app: AppHandle, state: SidecarState) {
     tokio::spawn(async move {
         let mut consecutive_failures = 0u8;
@@ -146,7 +260,7 @@ fn start_health_check_loop(app: AppHandle, state: SidecarState) {
                             "sidecar-restarting",
                             serde_json::json!({ "reason": err, "failures": consecutive_failures }),
                         );
-                        if let Err(respawn_err) = respawn_sidecar(&state) {
+                        if let Err(respawn_err) = respawn_sidecar(&app, &state) {
                             let _ = app.emit(
                                 "sidecar-error",
                                 serde_json::json!({ "error": respawn_err }),
@@ -160,9 +274,9 @@ fn start_health_check_loop(app: AppHandle, state: SidecarState) {
     });
 }
 
-pub fn respawn_sidecar(state: &SidecarState) -> Result<(), String> {
+pub fn respawn_sidecar(app: &AppHandle, state: &SidecarState) -> Result<(), String> {
     stop_current_sidecar(state);
-    start_sidecar_process(state).map_err(|err| format!("failed to respawn sidecar: {err}"))
+    start_sidecar_process(app, state).map_err(|err| format!("failed to respawn sidecar: {err}"))
 }
 
 pub fn shutdown_sidecar(state: &SidecarState) {
@@ -171,6 +285,21 @@ pub fn shutdown_sidecar(state: &SidecarState) {
     *port_guard = None;
 }
 
+#[cfg(not(feature = "dev-sidecar"))]
+fn stop_current_sidecar(state: &SidecarState) {
+    let maybe_child = {
+        let mut child_guard = state.child.lock().unwrap();
+        child_guard.take()
+    };
+
+    if let Some(child) = maybe_child {
+        if let Err(err) = child.kill() {
+            eprintln!("[aurotype] Failed to kill sidecar: {err}");
+        }
+    }
+}
+
+#[cfg(feature = "dev-sidecar")]
 fn stop_current_sidecar(state: &SidecarState) {
     let maybe_child = {
         let mut child_guard = state.child.lock().unwrap();
@@ -178,37 +307,34 @@ fn stop_current_sidecar(state: &SidecarState) {
     };
 
     if let Some(mut child) = maybe_child {
-        terminate_child(&mut child);
-    }
-}
+        // Graceful shutdown: try SIGTERM first, then kill
+        send_sigterm(&child);
 
-fn terminate_child(child: &mut Child) {
-    send_sigterm(child);
-
-    let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(2) {
-        match child.try_wait() {
-            Ok(Some(_)) => return,
-            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
-            Err(_) => break,
+        let start = std::time::Instant::now();
+        while start.elapsed() < Duration::from_secs(2) {
+            match child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Err(_) => break,
+            }
         }
-    }
 
-    let _ = child.kill();
-    let _ = child.wait();
+        let _ = child.kill();
+        let _ = child.wait();
+    }
 }
 
-#[cfg(unix)]
-fn send_sigterm(child: &Child) {
-    let _ = Command::new("kill")
+#[cfg(all(feature = "dev-sidecar", unix))]
+fn send_sigterm(child: &std::process::Child) {
+    let _ = std::process::Command::new("kill")
         .arg("-TERM")
         .arg(child.id().to_string())
         .status();
 }
 
-#[cfg(not(unix))]
-fn send_sigterm(child: &Child) {
-    let _ = Command::new("taskkill")
+#[cfg(all(feature = "dev-sidecar", not(unix)))]
+fn send_sigterm(child: &std::process::Child) {
+    let _ = std::process::Command::new("taskkill")
         .args(["/PID", &child.id().to_string(), "/T"])
         .status();
 }
