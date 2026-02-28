@@ -9,6 +9,10 @@
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister-all",
     "shell:default",
-    "store:default"
+    "store:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [{ "name": "binaries/aurotype-engine", "sidecar": true }]
+    }
   ]
 }
