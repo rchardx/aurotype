@@ -118,6 +118,7 @@ export default function SettingsPage() {
           >
             <option value="deepgram">Deepgram (Default)</option>
             <option value="siliconflow">SiliconFlow</option>
+            <option value="dashscope">DashScope (Paraformer)</option>
           </select>
         </div>
         <div className="form-group">

@@ -33,6 +33,7 @@ class ConfigureRequest(BaseModel):
     llm_provider: str | None = None
     openai_api_key: str | None = None
     siliconflow_api_key: str | None = None
+    dashscope_api_key: str | None = None
     language: str | None = None
 
 

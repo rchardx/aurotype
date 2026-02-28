@@ -106,10 +106,12 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let mut deepgram_api_key = String::new();
     let mut openai_api_key = String::new();
     let mut siliconflow_api_key = String::new();
+    let mut dashscope_api_key = String::new();
 
     match stt_provider {
         "deepgram" => deepgram_api_key = stt_api_key.to_string(),
         "siliconflow" => siliconflow_api_key = stt_api_key.to_string(),
+        "dashscope" => dashscope_api_key = stt_api_key.to_string(),
         _ => {}
     }
 
@@ -125,6 +127,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         "llm_provider": llm_provider,
         "openai_api_key": if openai_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(openai_api_key) },
         "siliconflow_api_key": if siliconflow_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(siliconflow_api_key) },
+        "dashscope_api_key": if dashscope_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(dashscope_api_key) },
         "language": language,
     });
 

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     deepgram_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     siliconflow_api_key: Optional[str] = None
+    dashscope_api_key: Optional[str] = None
     language: str = "auto"
 
     model_config = SettingsConfigDict(env_prefix="AUROTYPE_")
