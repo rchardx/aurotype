@@ -7,12 +7,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 STTProvider = getattr(
     import_module("aurotype_engine.providers.stt_base"), "STTProvider"
 )
-DeepgramSTTProvider = getattr(
-    import_module("aurotype_engine.providers.stt_deepgram"), "DeepgramSTTProvider"
-)
-SiliconFlowSTTProvider = getattr(
-    import_module("aurotype_engine.providers.stt_siliconflow"), "SiliconFlowSTTProvider"
-)
 DashScopeSTTProvider = getattr(
     import_module("aurotype_engine.providers.stt_dashscope"), "DashScopeSTTProvider"
 )
@@ -22,7 +16,7 @@ get_stt_provider = getattr(
 
 
 def _build_config() -> SimpleNamespace:
-    return SimpleNamespace(deepgram_api_key="dg-key", siliconflow_api_key="sf-key", dashscope_api_key="ds-key")
+    return SimpleNamespace(dashscope_api_key="ds-key", stt_model=None)
 
 
 def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
@@ -35,18 +29,6 @@ def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
     return mock_client, mock_cm
 
 
-def test_registry_returns_deepgram_provider() -> None:
-    provider = get_stt_provider("deepgram", _build_config())
-    assert isinstance(provider, DeepgramSTTProvider)
-    assert isinstance(provider, STTProvider)
-
-
-def test_registry_returns_siliconflow_provider() -> None:
-    provider = get_stt_provider("siliconflow", _build_config())
-    assert isinstance(provider, SiliconFlowSTTProvider)
-    assert isinstance(provider, STTProvider)
-
-
 def test_registry_returns_dashscope_provider() -> None:
     provider = get_stt_provider("dashscope", _build_config())
     assert isinstance(provider, DashScopeSTTProvider)
@@ -54,54 +36,22 @@ def test_registry_returns_dashscope_provider() -> None:
 
 
 def test_registry_raises_for_unknown_provider() -> None:
-    with patch(
-        "aurotype_engine.providers.stt_registry.STT_PROVIDER_REGISTRY",
-        {"deepgram": DeepgramSTTProvider},
-    ):
-        try:
-            get_stt_provider("unknown", _build_config())
-            assert False, "Expected ValueError"
-        except ValueError as exc:
-            assert str(exc) == "Unknown STT provider: unknown"
+    try:
+        get_stt_provider("unknown", _build_config())
+        assert False, "Expected ValueError"
+    except ValueError as exc:
+        assert str(exc) == "Unknown STT provider: unknown"
 
 
-def test_deepgram_transcribe_uses_mocked_httpx() -> None:
-    response = MagicMock()
-    response.status_code = 200
-    response.json.return_value = {
-        "results": {"channels": [{"alternatives": [{"transcript": "hello world"}]}]}
-    }
-
-    mock_client, mock_cm = _mock_async_client(response)
-
-    with patch(
-        "aurotype_engine.providers.stt_deepgram.httpx.AsyncClient", return_value=mock_cm
-    ) as client_cls:
-        provider = DeepgramSTTProvider(_build_config())
-        text = asyncio.run(provider.transcribe(b"wav-bytes", language="en"))
-
-    assert text == "hello world"
-    client_cls.assert_called_once_with(timeout=30.0)
-    mock_client.post.assert_awaited_once()
+def test_dashscope_default_model() -> None:
+    provider = DashScopeSTTProvider(_build_config())
+    assert provider._model == "paraformer-realtime-v2"
 
 
-def test_siliconflow_transcribe_uses_mocked_httpx() -> None:
-    response = MagicMock()
-    response.status_code = 200
-    response.json.return_value = {"text": ""}
-
-    mock_client, mock_cm = _mock_async_client(response)
-
-    with patch(
-        "aurotype_engine.providers.stt_siliconflow.httpx.AsyncClient",
-        return_value=mock_cm,
-    ) as client_cls:
-        provider = SiliconFlowSTTProvider(_build_config())
-        text = asyncio.run(provider.transcribe(b"wav-bytes"))
-
-    assert text == ""
-    client_cls.assert_called_once_with(timeout=10.0)
-    mock_client.post.assert_awaited_once()
+def test_dashscope_custom_model() -> None:
+    config = SimpleNamespace(dashscope_api_key="ds-key", stt_model="paraformer-v2")
+    provider = DashScopeSTTProvider(config)
+    assert provider._model == "paraformer-v2"
 
 
 def _mock_dashscope_modules(mock_recognition_cls: MagicMock) -> dict[str, MagicMock]:
