@@ -21,13 +21,15 @@
         "label": "float",
         "url": "float.html",
         "title": "",
-        "width": 300,
-        "height": 80,
+        "width": 320,
+        "height": 96,
         "decorations": false,
         "alwaysOnTop": true,
         "visible": false,
         "focusable": false,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {

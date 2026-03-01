@@ -5,6 +5,12 @@
   "windows": ["main", "float"],
   "permissions": [
     "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
     "opener:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister-all",
