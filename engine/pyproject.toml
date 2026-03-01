@@ -20,4 +20,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pyinstaller>=6.0.0"]
+dev = [
+    "pyinstaller>=6.0.0",
+    "pytest>=9.0.2",
+]
