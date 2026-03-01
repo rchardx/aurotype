@@ -146,7 +146,7 @@ class STTProvider(abc.ABC):
 # Registry
 STT_PROVIDER_REGISTRY: dict[str, Callable[[STTConfig], STTProvider]] = {
     "deepgram": DeepgramSTTProvider,
-    "siliconflow": SiliconFlowSTTProvider,
+    "dashscope": DashScopeSTTProvider,
 }
 
 def get_stt_provider(name: str, config: STTConfig) -> STTProvider:
@@ -216,3 +216,166 @@ use crate::state::{AppState, AppStateManager};
 | React settings UI | `src/Settings.tsx` |
 | React float overlay | `src/FloatWindow.tsx` |
 | Vite config (multi-page) | `vite.config.ts` |
+| PyInstaller spec (onefile) | `engine/aurotype-engine.spec` |
+| Full build script | `build.ps1` |
+| Playwright config | `playwright.config.ts` |
+| Playwright GUI tests | `e2e/gui-debug.spec.ts` |
+| Debug launch script | `debug-run.ps1` |
+| Vite dev server launcher | `start-vite.ps1` |
+
+## Dev & Debug Workflow (Windows)
+
+This project is a Tauri desktop app — the frontend runs inside a native webview, NOT a regular browser. You cannot simply open `localhost:1420` in Chrome to see the real app. However, for **UI development and visual inspection**, you can use Vite dev server + Playwright to screenshot and verify the React frontend in isolation.
+
+### Three Debug Layers
+
+| Layer | What to test | Method |
+|---|---|---|
+| Frontend UI/CSS | Layout, styling, form elements | Vite dev server + Playwright screenshots |
+| Python sidecar | Engine startup, API endpoints | `make engine-dev` or run sidecar exe directly |
+| Full integrated app | Hotkeys, tray, sidecar lifecycle | `debug-run.ps1` (launch release exe, capture stderr) |
+
+### Layer 1: Frontend UI Inspection via Playwright
+
+Use this when you need to **see** the UI — verify layout changes, check CSS, inspect form elements.
+
+**Why Playwright instead of a browser?** Tauri webview ≠ browser. Vite serves the same React code, so Playwright screenshots are faithful for UI verification. Tauri `invoke()` calls will fail (no Rust backend), but the DOM/CSS renders identically.
+
+#### Step 1: Start Vite dev server
+
+```powershell
+powershell -ExecutionPolicy Bypass -File start-vite.ps1
+```
+
+This starts Vite on `http://127.0.0.1:1420` in the background. Key detail: **must bind to `127.0.0.1`** explicitly — Vite defaults to IPv6 `::1` on Windows, which Playwright cannot reach.
+
+The script sets `TAURI_DEV_HOST=127.0.0.1` and passes `--host 127.0.0.1` to Vite. It polls until the server responds.
+
+#### Step 2: Run Playwright to capture screenshots
+
+```bash
+bunx playwright test e2e/gui-debug.spec.ts
+```
+
+Screenshots are saved to `e2e/screenshots/`. The spec captures:
+- `settings-full.png` — Full settings page
+- `section-*.png` — Each `.section` element individually
+- `float-window.png` — The floating overlay window
+
+#### Step 3: Inspect screenshots
+
+Use the `look_at` tool on `e2e/screenshots/*.png` to visually verify the UI.
+
+#### Step 4: Clean up
+
+```powershell
+powershell -Command "Get-Process -Name 'bun' -ErrorAction SilentlyContinue | Stop-Process -Force"
+```
+
+#### Gotchas
+
+- Playwright must be installed first: `bun add -D @playwright/test && bunx playwright install chromium`
+- `playwright.config.ts` has `webServer: undefined` — you manage the dev server manually
+- Tauri API calls (`invoke`, `listen`) will throw in Playwright since there's no Rust backend. This is expected. The UI still renders correctly for visual inspection.
+- If Vite appears to start but Playwright can't connect, check `vite-dev.log` and `vite-dev-err.log` in project root.
+
+### Layer 2: Python Sidecar Debugging
+
+For engine-only issues (API errors, provider crashes, import failures):
+
+```bash
+# Run engine directly from source (no PyInstaller)
+cd engine && uv run python -m aurotype_engine
+
+# Or run the PyInstaller-built binary directly
+engine\dist\aurotype-engine.exe
+```
+
+The engine prints `{"port": N}` on stdout at startup. If it crashes, the traceback goes to stderr. Common failure: `ModuleNotFoundError` in PyInstaller builds due to missing `hiddenimports` in `aurotype-engine.spec`.
+
+### Layer 3: Full App Debug (Release Exe)
+
+For integrated testing (sidecar spawning, hotkeys, tray icon):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File debug-run.ps1
+```
+
+This script:
+1. Launches `src-tauri\target\release\tauri-app.exe`
+2. Redirects stdout/stderr to temp log files
+3. Waits 8 seconds
+4. Reports whether the process is still alive or exited (with exit code)
+5. Dumps both logs
+
+**Interpreting results:**
+- "Process still running" + "Sidecar started on port XXXX" = SUCCESS
+- "Process EXITED" + Python traceback in stderr = sidecar crash (fix the Python error)
+- "Process EXITED" + Rust panic in stderr = Tauri setup failure
+
+**Important:** After running `debug-run.ps1`, always kill leftover processes before rebuilding:
+```powershell
+powershell -Command "Get-Process -Name 'aurotype-engine','tauri-app' -ErrorAction SilentlyContinue | Stop-Process -Force"
+```
+Otherwise `cargo build` / `tauri build` will fail with `PermissionDenied` on locked exe files.
+
+### Build Pipeline
+
+#### Quick iteration (no Python changes)
+
+If only frontend (src/) or Rust (src-tauri/) changed:
+
+```bash
+bun run tauri build        # ~40s — recompiles Rust + bundles frontend
+```
+
+The sidecar in `src-tauri\binaries\` is reused as-is.
+
+#### Full rebuild (Python changed)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
+
+This runs: PyInstaller (onefile) → copy exe to `src-tauri\binaries\` → `bun run tauri build`.
+
+Output: `src-tauri\target\release\bundle\nsis\Aurotype_0.1.0_x64-setup.exe`
+
+#### Direct exe testing (skip installer)
+
+After any `tauri build`, you can run the exe directly without installing:
+
+```
+src-tauri\target\release\tauri-app.exe
+```
+
+Tauri resolves the sidecar from the same directory (`src-tauri\target\release\aurotype-engine.exe`). The build copies it there automatically.
+
+**Shortcut for sidecar-only fix:** If you only changed Python code and want to test without a full `tauri build`:
+
+```powershell
+# Rebuild sidecar
+cd engine && uv run pyinstaller aurotype-engine.spec --noconfirm && cd ..
+# Copy to release dir (skip tauri build)
+Copy-Item engine\dist\aurotype-engine.exe src-tauri\target\release\aurotype-engine.exe -Force
+# Test
+powershell -ExecutionPolicy Bypass -File debug-run.ps1
+```
+
+### PyInstaller Notes
+
+- **Mode**: Onefile (`a.binaries` and `a.datas` passed directly to `EXE`, no `COLLECT` block).
+- **Spec file**: `engine/aurotype-engine.spec`. When adding new Python dependencies, add them to `hiddenimports`.
+- **Common failure**: `ModuleNotFoundError` at runtime — means a module is missing from `hiddenimports` or `datas` in the spec file.
+- **Output path**: `engine/dist/aurotype-engine.exe` (single file, ~35MB).
+
+### Windows-Specific Caveats
+
+1. **PowerShell variable escaping**: Bash tool runs commands through `/usr/bin/bash`. PowerShell `$_`, `$()`, `{}` get mangled. For anything non-trivial, write a `.ps1` script file and invoke it with `powershell -ExecutionPolicy Bypass -File script.ps1`.
+2. **IPv6 binding**: Vite binds to `::1` (IPv6) by default on Windows. Playwright and `Invoke-WebRequest` use IPv4 `127.0.0.1`. Always pass `--host 127.0.0.1` to Vite.
+3. **File locking**: Windows locks running executables. Always kill `aurotype-engine` and `tauri-app` processes before rebuilding.
+4. **Process management**: Use `Start-Process -PassThru` + `Stop-Process` pattern. No `tmux` on Windows — use PowerShell background processes or script files.
+
+## 交互规则
+
+- 需要提问时，尽量使用 question 工具来反问。
