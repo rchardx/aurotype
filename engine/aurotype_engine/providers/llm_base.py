@@ -13,6 +13,13 @@ SYSTEM_PROMPT = (
 )
 
 
+def get_system_prompt(custom: str | None = None) -> str:
+    """Return the custom system prompt if provided, otherwise the default."""
+    if custom and custom.strip():
+        return custom.strip()
+    return SYSTEM_PROMPT
+
+
 class LLMProvider(abc.ABC):
     @abc.abstractmethod
     async def polish(self, raw_text: str, language: str = "auto") -> str:

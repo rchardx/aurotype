@@ -2,7 +2,7 @@ from typing import Protocol, override
 
 import openai
 
-from .llm_base import LLMProvider, SYSTEM_PROMPT
+from .llm_base import LLMProvider, get_system_prompt
 
 
 class OpenAILLMProvider(LLMProvider):
@@ -14,6 +14,7 @@ class OpenAILLMProvider(LLMProvider):
 
     def __init__(self, config: "OpenAICompatibleConfig"):
         self._model: str = config.llm_model or "gpt-4o-mini"
+        self._system_prompt = get_system_prompt(getattr(config, 'system_prompt', None))
         kwargs: dict[str, object] = {
             "api_key": config.openai_api_key or "sk-placeholder",
             "timeout": 10.0,
@@ -27,7 +28,7 @@ class OpenAILLMProvider(LLMProvider):
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": raw_text},
             ],
         )

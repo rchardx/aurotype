@@ -37,6 +37,7 @@ class ConfigureRequest(BaseModel):
     llm_base_url: str | None = None
     llm_model: str | None = None
     language: str | None = None
+    system_prompt: str | None = None
 
 
 # Configure CORS for localhost and Tauri

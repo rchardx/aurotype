@@ -2,12 +2,13 @@ from typing import Protocol, override
 
 import openai
 
-from .llm_base import LLMProvider, SYSTEM_PROMPT
+from .llm_base import LLMProvider, get_system_prompt
 
 
 class DeepSeekLLMProvider(LLMProvider):
     def __init__(self, config: "DeepSeekConfig"):
         self._model: str = config.llm_model or "deepseek-chat"
+        self._system_prompt = get_system_prompt(getattr(config, 'system_prompt', None))
         self._client: openai.AsyncOpenAI
         self._client = openai.AsyncOpenAI(
             api_key=config.deepseek_api_key,
@@ -20,7 +21,7 @@ class DeepSeekLLMProvider(LLMProvider):
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": raw_text},
             ],
         )
