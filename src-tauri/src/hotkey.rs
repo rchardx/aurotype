@@ -31,11 +31,9 @@ pub fn register_hotkeys(app: &AppHandle) -> Result<(), Box<dyn std::error::Error
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(move |app, shortcut, event| {
-                if *shortcut == esc_for_handler {
-                    if event.state() == ShortcutState::Pressed {
-                        let state_manager = app.state::<AppStateManager>();
-                        handle_escape(&state_manager, app);
-                    }
+                if *shortcut == esc_for_handler && event.state() == ShortcutState::Pressed {
+                    let state_manager = app.state::<AppStateManager>();
+                    handle_escape(&state_manager, app);
                 }
                 // Main hotkey is handled by on_shortcut below — intentional no-op here.
             })

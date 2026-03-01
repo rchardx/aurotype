@@ -176,9 +176,8 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let mut dashscope_api_key = String::new();
     let mut deepseek_api_key = String::new();
 
-    match stt_provider {
-        "dashscope" => dashscope_api_key = stt_api_key.to_string(),
-        _ => {}
+    if stt_provider == "dashscope" {
+        dashscope_api_key = stt_api_key.to_string();
     }
 
     match llm_provider {
