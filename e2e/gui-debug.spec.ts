@@ -60,4 +60,53 @@ test.describe("GUI Debug — Float Window", () => {
       fullPage: true,
     });
   });
+
+  test("capture float recording state", async ({ page }) => {
+    await page.goto("/float.html");
+    await page.waitForSelector("#root");
+    await page.waitForTimeout(300);
+
+    // Inject recording state directly (no Tauri backend needed)
+    await page.evaluate(() => {
+      const wrapper = document.querySelector('.float-wrapper');
+      if (wrapper) {
+        // Remove idle class, add recording
+        wrapper.className = 'float-wrapper recording';
+      }
+      // Create the waveform bars if not present
+      const iconCenter = document.querySelector('.icon-center');
+      if (iconCenter && !iconCenter.querySelector('.waveform-bars')) {
+        iconCenter.innerHTML = `
+          <div class="waveform-bars">
+            <div class="wave-bar" style="height: 16px; animation-delay: 0s"></div>
+            <div class="wave-bar" style="height: 28px; animation-delay: 0.1s"></div>
+            <div class="wave-bar" style="height: 40px; animation-delay: 0.2s"></div>
+            <div class="wave-bar" style="height: 28px; animation-delay: 0.3s"></div>
+            <div class="wave-bar" style="height: 16px; animation-delay: 0.4s"></div>
+          </div>
+        `;
+      }
+      // Show info panel with recording text
+      const infoPanel = document.querySelector('.info-panel');
+      if (infoPanel) {
+        infoPanel.innerHTML = `
+          <div class="status-label">Recording</div>
+          <div class="timer-text">0:03</div>
+        `;
+      }
+      // Show pulse ring
+      const bubbleContainer = document.querySelector('.bubble-container');
+      if (bubbleContainer && !bubbleContainer.querySelector('.pulse-ring')) {
+        const ring = document.createElement('div');
+        ring.className = 'pulse-ring';
+        bubbleContainer.prepend(ring);
+      }
+    });
+
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: path.join(screenshotDir, "float-recording.png"),
+      fullPage: true,
+    });
+  });
 });

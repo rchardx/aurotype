@@ -16,14 +16,14 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
     let state_mgr = app.state::<AppStateManager>();
 
     let result = timeout(
-        Duration::from_secs(10),
+        Duration::from_secs(60),
         sidecar::sidecar_post(&sidecar, "/record/stop", serde_json::json!({})),
     )
     .await;
 
     match result {
         Err(_elapsed) => {
-            eprintln!("[aurotype] Pipeline timeout: /record/stop exceeded 10s");
+            eprintln!("[aurotype] Pipeline timeout: /record/stop exceeded 60s");
             state_mgr.transition(AppState::Error("Request timed out".to_string()), &app);
             tokio::time::sleep(Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app);
@@ -49,14 +49,30 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 state_mgr.transition(AppState::Idle, &app);
                 return;
             }
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+
+            // Save audio recording to disk if present
+            let audio_data = parsed.as_ref()
+                .and_then(|v| v["audio_data"].as_str().map(str::to_string));
+            let audio_file = if let Some(b64) = audio_data {
+                match save_audio_file(&app, &b64, &timestamp) {
+                    Ok(path) => Some(path),
+                    Err(e) => {
+                        eprintln!("[aurotype] Failed to save audio: {e}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
 
             // Record to history
-            let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
             state_mgr.add_history(TranscriptionRecord {
                 raw_text: raw_text.clone(),
                 polished_text: polished.clone(),
                 timestamp,
-            });
+                audio_file,
+            }, &app);
 
             let current_state = state_mgr.get();
             if current_state == AppState::Idle {
@@ -78,9 +94,36 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 return;
             }
 
+            // Brief pause so the "Complete" indicator is visible
+            tokio::time::sleep(Duration::from_millis(800)).await;
             state_mgr.transition(AppState::Idle, &app);
         }
     }
+}
+
+fn save_audio_file(app: &tauri::AppHandle, b64_data: &str, timestamp: &str) -> Result<String, String> {
+    use base64::Engine;
+    use std::fs;
+    use std::path::PathBuf;
+
+    let app_data = app.path().app_data_dir().map_err(|e| format!("no app_data_dir: {e}"))?;
+    let recordings_dir: PathBuf = app_data.join("recordings");
+    fs::create_dir_all(&recordings_dir).map_err(|e| format!("mkdir recordings: {e}"))?;
+
+    // Sanitize timestamp for filename: "2025-01-15 14:30:25" -> "2025-01-15_14-30-25"
+    let safe_name = timestamp.replace(' ', "_").replace(':', "-");
+    let filename = format!("{safe_name}.wav");
+    let filepath = recordings_dir.join(&filename);
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64_data)
+        .map_err(|e| format!("base64 decode: {e}"))?;
+
+    fs::write(&filepath, &bytes).map_err(|e| format!("write wav: {e}"))?;
+
+    let path_str = filepath.to_string_lossy().to_string();
+    eprintln!("[aurotype] Saved audio recording: {path_str} ({} bytes)", bytes.len());
+    Ok(path_str)
 }
 
 async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
@@ -124,6 +167,10 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         .get("stt_model")
         .and_then(|v| v.as_str())
         .unwrap_or("");
+    let system_prompt = config
+        .get("system_prompt")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
     let mut openai_api_key = String::new();
     let mut dashscope_api_key = String::new();
@@ -149,6 +196,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         "deepseek_api_key": if deepseek_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(deepseek_api_key) },
         "llm_base_url": if llm_base_url.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_base_url.to_string()) },
         "llm_model": if llm_model.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_model.to_string()) },
+        "system_prompt": if system_prompt.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(system_prompt.to_string()) },
         "language": language,
     });
 
@@ -271,6 +319,19 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn clear_history(state: tauri::State<AppStateManager>, app: tauri::AppHandle) {
+    state.clear_history(&app);
+}
+
+#[tauri::command]
+fn get_audio_data(path: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = std::fs::read(&path).map_err(|e| format!("read audio: {e}"))?;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    Ok(format!("data:audio/wav;base64,{b64}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -292,6 +353,8 @@ pub fn run() {
             sidecar::get_health,
             injection::inject_text_at_cursor,
             hotkey::update_hotkey,
+            clear_history,
+            get_audio_data,
         ])
         .setup(|app| {
             let sidecar_state = sidecar::spawn_sidecar(app.handle().clone())
@@ -304,11 +367,27 @@ pub fn run() {
                 let _ = sync_settings_internal(&sync_handle).await;
             });
 
+            // Load persisted transcription history from disk
+            let state_mgr = app.state::<AppStateManager>();
+            state_mgr.load_history_from_store(app.handle());
+
             #[cfg(desktop)]
             {
                 let handle = app.handle();
                 hotkey::register_hotkeys(handle)?;
                 tray::create_tray(handle)?;
+            }
+
+            // Explicitly set window icon for taskbar on Windows
+            if let Some(icon) = app.default_window_icon().cloned() {
+                if let Some(main_win) = app.get_webview_window("main") {
+                    let _ = main_win.set_icon(icon);
+                }
+            }
+
+            // Force WebView2 background to fully transparent on Windows
+            if let Some(float_win) = app.get_webview_window("float") {
+                let _ = float_win.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
             }
 
             Ok(())
