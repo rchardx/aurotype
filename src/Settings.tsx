@@ -9,32 +9,75 @@ const store = new LazyStore("settings.json");
 interface SettingsData {
   stt_provider: string;
   stt_api_key: string;
+  stt_model: string;
   llm_provider: string;
   llm_api_key: string;
   llm_model: string;
+  llm_base_url: string;
+  hotkey: string;
   hotkey_mode: "hold" | "toggle";
   language: string;
 }
+interface TranscriptionRecord {
+  raw_text: string;
+  polished_text: string;
+  timestamp: string;
+}
+
 
 const defaultSettings: SettingsData = {
-  stt_provider: "deepgram",
+  stt_provider: "dashscope",
   stt_api_key: "",
-  llm_provider: "openai",
+  stt_model: "paraformer-realtime-v2",
+  llm_provider: "deepseek",
   llm_api_key: "",
-  llm_model: "gpt-4o-mini",
+  llm_model: "deepseek-chat",
+  llm_base_url: "",
+  hotkey: "Ctrl+Alt+Space",
   hotkey_mode: "hold",
   language: "auto",
 };
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await invoke("copy_to_clipboard", { text });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("Failed to copy:", e);
+    }
+  };
+
+  return (
+    <button 
+      className={`history-copy-btn ${copied ? "copied" : ""}`}
+      onClick={handleCopy}
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [healthStatus, setHealthStatus] = useState<boolean | null>(null);
-  const [testStatus, setTestStatus] = useState<string>("");
-
+  const [testLlmStatus, setTestLlmStatus] = useState<string>("");
+  const [testSttStatus, setTestSttStatus] = useState<string>("");
+  const [history, setHistory] = useState<TranscriptionRecord[]>([]);
   useEffect(() => {
     loadSettings();
+    loadHistory();
     checkHealth();
+    // Poll health every 5 seconds
+    const healthInterval = setInterval(() => {
+      checkHealth();
+      loadHistory();
+    }, 5000);
+    return () => clearInterval(healthInterval);
   }, []);
 
   const loadSettings = async () => {
@@ -42,7 +85,17 @@ export default function SettingsPage() {
       // Load individual keys or a single object. Using a single object "config" for simplicity
       const saved = await store.get<SettingsData>("config");
       if (saved) {
-        setSettings({ ...defaultSettings, ...saved });
+        // Migrate deprecated Alt+Space hotkey (Windows-reserved)
+        const migrated = { ...defaultSettings, ...saved };
+        if (migrated.hotkey === "Alt+Space") {
+          migrated.hotkey = "Ctrl+Alt+Space";
+        }
+        setSettings(migrated);
+        // Persist migrated settings if hotkey changed
+        if (saved.hotkey === "Alt+Space") {
+          await store.set("config", migrated);
+          await store.save();
+        }
       }
     } catch (e) {
       console.error("Failed to load settings:", e);
@@ -70,25 +123,47 @@ export default function SettingsPage() {
     saveSettings({ ...settings, [field]: value });
   };
 
+  const handleHotkeyChange = async (newHotkey: string) => {
+    try {
+      await invoke("update_hotkey", { shortcut: newHotkey });
+      saveSettings({ ...settings, hotkey: newHotkey });
+    } catch (e) {
+      console.error("Failed to update hotkey:", e);
+    }
+  };
+
   const checkHealth = async () => {
     try {
-      const status = await invoke<boolean>("get_health");
-      setHealthStatus(status);
+      const raw = await invoke<string>("get_health");
+      const parsed = JSON.parse(raw);
+      setHealthStatus(parsed.status === "ok");
     } catch (e) {
       console.error("Failed to check health:", e);
       setHealthStatus(false);
     }
   };
 
-  const testConnection = async () => {
-    setTestStatus("Testing...");
+  const testLlmConnection = async () => {
+    setTestLlmStatus("Testing...");
     try {
-      // Stub implementation as requested
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setTestStatus("Success!");
-      setTimeout(() => setTestStatus(""), 2000);
+      await invoke<string>("test_llm");
+      setTestLlmStatus("Success!");
+      setTimeout(() => setTestLlmStatus(""), 2000);
     } catch (e) {
-      setTestStatus("Failed");
+      setTestLlmStatus("Failed: " + (e instanceof Error ? e.message : String(e)));
+      setTimeout(() => setTestLlmStatus(""), 3000);
+    }
+  };
+
+  const testSttConnection = async () => {
+    setTestSttStatus("Testing...");
+    try {
+      await invoke<string>("test_stt");
+      setTestSttStatus("Success!");
+      setTimeout(() => setTestSttStatus(""), 2000);
+    } catch (e) {
+      setTestSttStatus("Failed: " + (e instanceof Error ? e.message : String(e)));
+      setTimeout(() => setTestSttStatus(""), 3000);
     }
   };
 
@@ -100,12 +175,22 @@ export default function SettingsPage() {
       console.error("Failed to restart engine:", e);
     }
   };
+  const loadHistory = async () => {
+    try {
+      const records = await invoke<TranscriptionRecord[]>("get_history");
+      setHistory(records.reverse());
+    } catch (e) {
+      console.error("Failed to load history:", e);
+    }
+  };
+
+
 
   if (loading) return <div className="settings-container">Loading...</div>;
 
   return (
     <div className="settings-container">
-      <h1>Settings</h1>
+      <h1><img src="/logo.png" alt="Aurotype" className="brand-logo" />Aurotype</h1>
 
       {/* STT Provider Section */}
       <div className="section">
@@ -116,9 +201,7 @@ export default function SettingsPage() {
             value={settings.stt_provider}
             onChange={(e) => handleChange("stt_provider", e.target.value)}
           >
-            <option value="deepgram">Deepgram (Default)</option>
-            <option value="siliconflow">SiliconFlow</option>
-            <option value="dashscope">DashScope (Paraformer)</option>
+            <option value="dashscope">DashScope / Paraformer (Default)</option>
           </select>
         </div>
         <div className="form-group">
@@ -130,8 +213,17 @@ export default function SettingsPage() {
             onChange={(e) => handleChange("stt_api_key", e.target.value)}
           />
         </div>
-        <button onClick={testConnection} className="secondary">
-          {testStatus || "Test Connection"}
+        <div className="form-group">
+          <label>Model</label>
+          <input
+            type="text"
+            placeholder="paraformer-realtime-v2"
+            value={settings.stt_model}
+            onChange={(e) => handleChange("stt_model", e.target.value)}
+          />
+        </div>
+        <button onClick={testSttConnection} className="secondary" disabled={!healthStatus}>
+          {testSttStatus || "Test Connection"}
         </button>
       </div>
 
@@ -144,8 +236,8 @@ export default function SettingsPage() {
             value={settings.llm_provider}
             onChange={(e) => handleChange("llm_provider", e.target.value)}
           >
-            <option value="openai">OpenAI (Default)</option>
-            <option value="siliconflow">SiliconFlow</option>
+            <option value="deepseek">DeepSeek (Default)</option>
+            <option value="openai">OpenAI Compatible</option>
             <option value="none">None</option>
           </select>
         </div>
@@ -161,6 +253,17 @@ export default function SettingsPage() {
                 onChange={(e) => handleChange("llm_api_key", e.target.value)}
               />
             </div>
+            {settings.llm_provider === "openai" && (
+              <div className="form-group">
+                <label>Base URL</label>
+                <input
+                  type="text"
+                  placeholder="https://api.openai.com/v1"
+                  value={settings.llm_base_url}
+                  onChange={(e) => handleChange("llm_base_url", e.target.value)}
+                />
+              </div>
+            )}
             <div className="form-group">
               <label>Model</label>
               <input
@@ -169,6 +272,9 @@ export default function SettingsPage() {
                 onChange={(e) => handleChange("llm_model", e.target.value)}
               />
             </div>
+            <button onClick={testLlmConnection} className="secondary" disabled={!healthStatus}>
+              {testLlmStatus || "Test Connection"}
+            </button>
           </>
         )}
       </div>
@@ -177,9 +283,20 @@ export default function SettingsPage() {
       <div className="section">
         <div className="section-header">Hotkey</div>
         <div className="form-group">
-          <label>Current Hotkey</label>
-          <div className="hotkey-display">Ctrl+Shift+Space</div>
-          <p className="hint">To change hotkey, please restart the app.</p>
+          <label>Shortcut</label>
+          <select
+            value={settings.hotkey}
+            onChange={(e) => handleHotkeyChange(e.target.value)}
+          >
+            <option value="Ctrl+Alt+Space">Ctrl+Alt+Space (Default)</option>
+            <option value="CmdOrCtrl+Shift+Space">Ctrl+Shift+Space</option>
+            <option value="CmdOrCtrl+Shift+A">Ctrl+Shift+A</option>
+            <option value="CmdOrCtrl+Shift+R">Ctrl+Shift+R</option>
+            <option value="CmdOrCtrl+Shift+V">Ctrl+Shift+V</option>
+            <option value="CmdOrCtrl+Space">Ctrl+Space</option>
+            <option value="F9">F9</option>
+            <option value="F10">F10</option>
+          </select>
         </div>
         <div className="form-group">
           <label>Mode</label>
@@ -228,6 +345,38 @@ export default function SettingsPage() {
           </select>
         </div>
       </div>
+      {/* History Section */}
+      <div className="section">
+        <div className="section-header">
+          History
+          <button 
+            className="secondary" 
+            style={{ fontSize: '12px', padding: '4px 8px' }}
+            onClick={loadHistory}
+          >
+            Refresh
+          </button>
+        </div>
+        
+        {history.length === 0 ? (
+          <div className="history-empty">No recordings yet</div>
+        ) : (
+          <div className="history-list">
+            {history.map((record, index) => (
+              <div key={index} className="history-item">
+                <div className="history-header">
+                  <span className="history-timestamp">{record.timestamp}</span>
+                  <CopyButton text={record.polished_text} />
+                </div>
+                <div className="history-polished">{record.polished_text}</div>
+                <div className="history-raw">{record.raw_text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+
 
       {/* Advanced Section */}
       <div className="section">
@@ -248,7 +397,7 @@ export default function SettingsPage() {
             Check if the background engine is running correctly.
           </p>
         </div>
-        <button onClick={restartEngine} className="secondary">
+        <button onClick={restartEngine} className="secondary" disabled={!healthStatus}>
           Restart Engine
         </button>
       </div>

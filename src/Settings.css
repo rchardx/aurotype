@@ -27,6 +27,15 @@ h1 {
   margin-bottom: 20px;
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .section {
@@ -148,3 +157,97 @@ button.secondary {
   color: #888;
   margin-top: 5px;
 }
+
+/* History Section */
+.history-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg);
+}
+
+.history-item {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.history-timestamp {
+  font-family: monospace;
+  font-size: 12px;
+  color: #888;
+}
+
+.history-polished {
+  font-size: 14px;
+  color: var(--text-color);
+  line-height: 1.4;
+}
+
+.history-raw {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 30px;
+  color: #888;
+  font-style: italic;
+  background: var(--input-bg);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.history-copy-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-color);
+  color: #aaa;
+}
+
+.history-copy-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--text-color);
+}
+
+.history-copy-btn.copied {
+  background-color: var(--success-color);
+  color: white;
+  border-color: var(--success-color);
+}
+
+/* Scrollbar styling for history list */
+.history-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: var(--input-bg);
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
