@@ -4,7 +4,7 @@ mod sidecar;
 mod state;
 mod tray;
 
-use state::{AppState, AppStateManager};
+use state::{AppState, AppStateManager, HotkeyMode, TranscriptionRecord};
 use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
@@ -35,8 +35,11 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
             state_mgr.transition(AppState::Idle, &app);
         }
         Ok(Ok(response_text)) => {
-            let polished = serde_json::from_str::<serde_json::Value>(&response_text)
-                .ok()
+            let parsed = serde_json::from_str::<serde_json::Value>(&response_text).ok();
+            let raw_text = parsed.as_ref()
+                .and_then(|v| v["raw_text"].as_str().map(str::to_string))
+                .unwrap_or_default();
+            let polished = parsed.as_ref()
                 .and_then(|v| v["polished_text"].as_str().map(str::to_string))
                 .unwrap_or_default();
 
@@ -46,6 +49,14 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 state_mgr.transition(AppState::Idle, &app);
                 return;
             }
+
+            // Record to history
+            let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+            state_mgr.add_history(TranscriptionRecord {
+                raw_text: raw_text.clone(),
+                polished_text: polished.clone(),
+                timestamp,
+            });
 
             let current_state = state_mgr.get();
             if current_state == AppState::Idle {
@@ -61,10 +72,9 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
             }
 
             if let Err(e) = injection::inject_text(&polished) {
-                eprintln!("[aurotype] Injection error: {e}");
-                state_mgr.transition(AppState::Error(format!("Injection failed: {e}")), &app);
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                state_mgr.transition(AppState::Idle, &app);
+                eprintln!("[aurotype] Injection error (offering copy): {e}");
+                // Instead of showing error, offer copy fallback
+                state_mgr.transition(AppState::CopyAvailable(polished), &app);
                 return;
             }
 
@@ -85,7 +95,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let stt_provider = config
         .get("stt_provider")
         .and_then(|v| v.as_str())
-        .unwrap_or("deepgram");
+        .unwrap_or("dashscope");
     let stt_api_key = config
         .get("stt_api_key")
         .and_then(|v| v.as_str())
@@ -93,7 +103,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let llm_provider = config
         .get("llm_provider")
         .and_then(|v| v.as_str())
-        .unwrap_or("openai");
+        .unwrap_or("deepseek");
     let llm_api_key = config
         .get("llm_api_key")
         .and_then(|v| v.as_str())
@@ -102,37 +112,69 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         .get("language")
         .and_then(|v| v.as_str())
         .unwrap_or("auto");
+    let llm_base_url = config
+        .get("llm_base_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let llm_model = config
+        .get("llm_model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let stt_model = config
+        .get("stt_model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
 
-    let mut deepgram_api_key = String::new();
     let mut openai_api_key = String::new();
-    let mut siliconflow_api_key = String::new();
     let mut dashscope_api_key = String::new();
+    let mut deepseek_api_key = String::new();
 
     match stt_provider {
-        "deepgram" => deepgram_api_key = stt_api_key.to_string(),
-        "siliconflow" => siliconflow_api_key = stt_api_key.to_string(),
         "dashscope" => dashscope_api_key = stt_api_key.to_string(),
         _ => {}
     }
 
     match llm_provider {
         "openai" => openai_api_key = llm_api_key.to_string(),
-        "siliconflow" => siliconflow_api_key = llm_api_key.to_string(),
+        "deepseek" => deepseek_api_key = llm_api_key.to_string(),
         _ => {}
     }
 
     let body = serde_json::json!({
         "stt_provider": stt_provider,
-        "deepgram_api_key": if deepgram_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(deepgram_api_key) },
+        "stt_model": if stt_model.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(stt_model.to_string()) },
         "llm_provider": llm_provider,
         "openai_api_key": if openai_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(openai_api_key) },
-        "siliconflow_api_key": if siliconflow_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(siliconflow_api_key) },
         "dashscope_api_key": if dashscope_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(dashscope_api_key) },
+        "deepseek_api_key": if deepseek_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(deepseek_api_key) },
+        "llm_base_url": if llm_base_url.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_base_url.to_string()) },
+        "llm_model": if llm_model.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_model.to_string()) },
         "language": language,
     });
 
     let sidecar = app.state::<sidecar::SidecarState>();
     sidecar::sidecar_post(&sidecar, "/configure", body).await?;
+
+    // Sync hotkey mode
+    let hotkey_mode = config
+        .get("hotkey_mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("hold");
+    {
+        let state_manager = app.state::<AppStateManager>();
+        let mut mode = state_manager.mode.lock().unwrap();
+        *mode = match hotkey_mode {
+            "toggle" => HotkeyMode::Toggle,
+            _ => HotkeyMode::HoldToRecord,
+        };
+    }
+
+    // Sync hotkey shortcut if present (skip deprecated Alt+Space — Windows-reserved)
+    if let Some(hotkey_str) = config.get("hotkey").and_then(|v| v.as_str()) {
+        if !hotkey_str.is_empty() && hotkey_str != "Alt+Space" {
+            let _ = hotkey::update_hotkey(app.clone(), hotkey_str.to_string());
+        }
+    }
 
     Ok(())
 }
@@ -190,13 +232,43 @@ async fn sync_settings(app: tauri::AppHandle) -> Result<(), String> {
 fn cancel(state: tauri::State<AppStateManager>, app: tauri::AppHandle) -> Result<(), String> {
     let current = state.get();
     match current {
-        AppState::Recording | AppState::Processing | AppState::Error(_) => {
+        AppState::Recording | AppState::Processing | AppState::Error(_) | AppState::CopyAvailable(_) => {
             state.transition(AppState::Idle, &app);
             Ok(())
         }
         AppState::Idle => Ok(()),
         AppState::Injecting => Err("Cannot cancel during text injection".to_string()),
     }
+}
+
+#[tauri::command]
+async fn test_llm(sidecar: tauri::State<'_, sidecar::SidecarState>) -> Result<String, String> {
+    sidecar::sidecar_post(&sidecar, "/test-llm", serde_json::json!({})).await
+}
+
+#[tauri::command]
+async fn test_stt(sidecar: tauri::State<'_, sidecar::SidecarState>) -> Result<String, String> {
+    sidecar::sidecar_post(&sidecar, "/test-stt", serde_json::json!({})).await
+}
+
+#[tauri::command]
+async fn get_volume(sidecar: tauri::State<'_, sidecar::SidecarState>) -> Result<f64, String> {
+    let text = sidecar::sidecar_get(&sidecar, "/volume").await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("Failed to parse volume response: {e}"))?;
+    Ok(parsed["volume"].as_f64().unwrap_or(0.0))
+}
+
+#[tauri::command]
+fn get_history(state: tauri::State<AppStateManager>) -> Vec<TranscriptionRecord> {
+    state.get_history()
+}
+
+#[tauri::command]
+fn copy_to_clipboard(text: String) -> Result<(), String> {
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    clipboard.set_text(text).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -212,8 +284,14 @@ pub fn run() {
             stop_recording,
             sync_settings,
             cancel,
+            test_llm,
+            test_stt,
+            get_volume,
+            get_history,
+            copy_to_clipboard,
             sidecar::get_health,
             injection::inject_text_at_cursor,
+            hotkey::update_hotkey,
         ])
         .setup(|app| {
             let sidecar_state = sidecar::spawn_sidecar(app.handle().clone())
@@ -221,7 +299,7 @@ pub fn run() {
             app.manage(sidecar_state);
 
             let sync_handle = app.handle().clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let _ = sync_settings_internal(&sync_handle).await;
             });
@@ -234,6 +312,15 @@ pub fn run() {
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Intercept close on main window: hide to tray instead of exiting
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
