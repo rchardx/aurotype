@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/rchardx/aurotype/actions/workflows/ci.yml"><img src="https://github.com/rchardx/aurotype/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
+
+<p align="center">
   Voice-to-text desktop app — speak naturally, get polished text injected where your cursor is.
 </p>
 
@@ -40,11 +44,57 @@ make dev            # bun run tauri dev
 powershell -ExecutionPolicy Bypass -File build.ps1
 ```
 
-## Requirements
+## Development
+
+### Prerequisites
 
 - [Bun](https://bun.sh/) (or Node.js)
 - [Rust](https://rustup.rs/) (stable)
 - [Python 3.12+](https://www.python.org/) with [uv](https://docs.astral.sh/uv/)
+
+### Setup
+
+```bash
+make setup          # Install frontend + Python dependencies
+```
+
+### Running
+
+```bash
+make dev            # Run full app (Tauri + Vite + Python sidecar)
+make engine-dev     # Run Python engine standalone
+```
+
+## Testing
+
+### Python Engine Tests
+
+```bash
+cd engine && uv run pytest ../tests/ -v          # Run all tests
+cd engine && uv run pytest ../tests/test_pipeline.py -v  # Single file
+```
+
+### TypeScript Type Check
+
+```bash
+bun run build       # Full build (tsc + vite)
+```
+
+### Rust
+
+```bash
+cd src-tauri && cargo test      # Run Rust tests
+cd src-tauri && cargo clippy    # Lint
+```
+
+## CI
+
+GitHub Actions runs on every push to `main` and on pull requests:
+
+- **Python Tests** — pytest across all engine unit tests
+- **TypeScript Check** — `tsc --noEmit` type verification
+- **Rust Check** — `cargo check` + `cargo clippy -D warnings`
+
 
 ## License
 
