@@ -23,7 +23,7 @@ Pop-Location
 $binDir = "src-tauri\binaries"
 if (-not (Test-Path $binDir)) { New-Item -ItemType Directory -Path $binDir | Out-Null }
 
-$src = "engine\dist\aurotype-engine\aurotype-engine.exe"
+$src = "engine\dist\aurotype-engine.exe"
 $dst = "$binDir\aurotype-engine-$triple.exe"
 Write-Host "[build] Copying $src -> $dst"
 Copy-Item $src $dst -Force
