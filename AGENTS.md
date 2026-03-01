@@ -118,3 +118,4 @@ No linter/formatter configured. TypeScript strict mode with `noUnusedLocals` and
 ## Interaction Rules
 
 - When clarification is needed, prefer using the `question` tool to ask the user.
+- NEVER add `Co-authored-by` trailers or attribution footers to git commits.
