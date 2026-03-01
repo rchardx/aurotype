@@ -41,6 +41,8 @@ const defaultSettings: SettingsData = {
   system_prompt: "",
 };
 
+const DEFAULT_SYSTEM_PROMPT = "You are a text polisher for voice transcription. Clean up the following speech transcription: remove filler words (um, uh, like, you know), fix grammar and punctuation, preserve meaning and tone. IMPORTANT: If the speaker mixes languages (e.g. Chinese with English words/phrases), keep the original language for each part as spoken. Do NOT translate English words into Chinese or vice versa. Preserve code terms, brand names, and technical jargon in their original language. Return ONLY the polished text, no explanations.";
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -107,6 +109,8 @@ export default function SettingsPage() {
   const [testLlmStatus, setTestLlmStatus] = useState<string>("");
   const [testSttStatus, setTestSttStatus] = useState<string>("");
   const [history, setHistory] = useState<TranscriptionRecord[]>([]);
+  const [promptDraft, setPromptDraft] = useState("");
+  const [promptSaved, setPromptSaved] = useState(false);
   useEffect(() => {
     loadSettings();
     loadHistory();
@@ -130,12 +134,14 @@ export default function SettingsPage() {
           migrated.hotkey = "Ctrl+Alt+Space";
         }
         setSettings(migrated);
+        setPromptDraft(migrated.system_prompt || DEFAULT_SYSTEM_PROMPT);
         // Persist migrated settings if hotkey changed
         if (saved.hotkey === "Alt+Space") {
           await store.set("config", migrated);
           await store.save();
         }
       }
+      setPromptDraft(DEFAULT_SYSTEM_PROMPT);
     } catch (e) {
       console.error("Failed to load settings:", e);
     } finally {
@@ -392,18 +398,43 @@ export default function SettingsPage() {
             <button onClick={testLlmConnection} className="secondary" disabled={!healthStatus}>
               {testLlmStatus || "Test Connection"}
             </button>
-            <div className="form-group">
+            <div className="form-group" style={{ marginTop: '12px' }}>
               <label>System Prompt</label>
               <p className="hint">
-                Customize how the LLM polishes your transcription. Leave empty to use the default prompt.
+                Customize how the LLM polishes your transcription. Edit the prompt below and click Save.
               </p>
               <textarea
                 rows={5}
-                placeholder="You are a text polisher for voice transcription. Clean up the following speech transcription: remove filler words (um, uh, like, you know), fix grammar and punctuation, preserve meaning and tone. IMPORTANT: If the speaker mixes languages (e.g. Chinese with English words/phrases), keep the original language for each part as spoken. Do NOT translate English words into Chinese or vice versa. Preserve code terms, brand names, and technical jargon in their original language. Return ONLY the polished text, no explanations."
-                value={settings.system_prompt}
-                onChange={(e) => handleChange("system_prompt", e.target.value)}
+                value={promptDraft}
+                onChange={(e) => {
+                  setPromptDraft(e.target.value);
+                  setPromptSaved(false);
+                }}
                 style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '13px' }}
               />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    const valueToSave = promptDraft.trim() === DEFAULT_SYSTEM_PROMPT.trim() ? "" : promptDraft;
+                    handleChange("system_prompt", valueToSave);
+                    setPromptSaved(true);
+                    setTimeout(() => setPromptSaved(false), 2000);
+                  }}
+                >
+                  {promptSaved ? "Saved!" : "Save"}
+                </button>
+                <button
+                  className="secondary"
+                  style={{ color: '#888' }}
+                  onClick={() => {
+                    setPromptDraft(DEFAULT_SYSTEM_PROMPT);
+                    setPromptSaved(false);
+                  }}
+                >
+                  Reset to Default
+                </button>
+              </div>
             </div>
       </div>
 
