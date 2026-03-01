@@ -8,6 +8,7 @@
     "opener:default",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister-all",
+    "global-shortcut:allow-unregister",
     "shell:default",
     "store:default",
     {

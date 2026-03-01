@@ -59,7 +59,7 @@ fn start_sidecar_process(
     let (port_tx, port_rx) = tokio::sync::oneshot::channel::<u16>();
 
     let port_arc = state.port.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut port_tx = Some(port_tx);
 
         while let Some(event) = rx.recv().await {
@@ -239,7 +239,7 @@ fn get_sidecar_port(state: &SidecarState) -> Result<u16, String> {
 // ---------------------------------------------------------------------------
 
 fn start_health_check_loop(app: AppHandle, state: SidecarState) {
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let mut consecutive_failures = 0u8;
 
         loop {

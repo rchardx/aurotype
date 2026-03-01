@@ -6,9 +6,9 @@ use tauri_plugin_global_shortcut::{
 use crate::{injection, sidecar};
 use crate::state::{AppState, AppStateManager, HotkeyMode};
 
-/// Default hotkey: CmdOrCtrl+Shift+Space
+/// Default hotkey: Ctrl+Alt+Space
 fn default_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::Space)
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space)
 }
 
 /// Escape key shortcut for cancelling recording.
@@ -19,33 +19,48 @@ fn escape_shortcut() -> Shortcut {
 /// Register all global hotkeys on the app.
 /// Called during `setup` in `lib.rs`.
 pub fn register_hotkeys(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let main_shortcut = default_shortcut();
     let esc_shortcut = escape_shortcut();
+    let main_shortcut = default_shortcut();
 
+    // CRITICAL: Windows requires BOTH with_handler AND on_shortcut for hotkeys to fire.
+    // Using only one of them does not work (confirmed via simulated keypress testing).
+
+    // Step 1: Build plugin with a global handler that routes escape keys.
+    // The global handler catches escape; main hotkey is handled by on_shortcut below.
+    let esc_for_handler = esc_shortcut;
     app.plugin(
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(move |app, shortcut, event| {
-                let state_manager = app.state::<AppStateManager>();
-
-                if *shortcut == main_shortcut {
-                    handle_main_hotkey(&state_manager, app, event.state());
-                } else if *shortcut == esc_shortcut {
-                    // Escape only acts on press
+                if *shortcut == esc_for_handler {
                     if event.state() == ShortcutState::Pressed {
+                        let state_manager = app.state::<AppStateManager>();
                         handle_escape(&state_manager, app);
                     }
                 }
+                // Main hotkey is handled by on_shortcut below — intentional no-op here.
             })
             .build(),
     )?;
 
-    app.global_shortcut().register(default_shortcut())?;
-    app.global_shortcut().register(escape_shortcut())?;
+    // Step 2: Register escape via register() (handled by with_handler above).
+    app.global_shortcut().register(esc_shortcut)?;
 
+    // Step 3: Register main hotkey via on_shortcut() — this is the handler that actually fires.
+    app.global_shortcut().on_shortcut(main_shortcut, move |app, _shortcut, event| {
+        let state_manager = app.state::<AppStateManager>();
+        handle_main_hotkey(&state_manager, app, event.state());
+    })?;
+
+    {
+        let state_manager = app.state::<AppStateManager>();
+        *state_manager.current_shortcut.lock().unwrap() = Some(main_shortcut);
+    }
+
+    eprintln!("[aurotype] Hotkeys registered: main={main_shortcut:?}, escape=Escape");
     Ok(())
 }
 
-/// Handle the main hotkey (CmdOrCtrl+Shift+Space).
+/// Handle the main hotkey (Ctrl+Alt+Space).
 /// Behavior depends on the configured HotkeyMode.
 fn handle_main_hotkey(
     manager: &AppStateManager,
@@ -93,7 +108,7 @@ fn start_recording(manager: &AppStateManager, app: &AppHandle) {
     manager.transition(AppState::Recording, app);
 
     let app_clone = app.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         let sidecar_state = app_clone.state::<sidecar::SidecarState>();
         if let Err(err) = sidecar::sidecar_post(&sidecar_state, "/record/start", serde_json::json!({})).await {
             let state_mgr = app_clone.state::<AppStateManager>();
@@ -117,7 +132,7 @@ fn start_recording(manager: &AppStateManager, app: &AppHandle) {
 fn stop_recording(manager: &AppStateManager, app: &AppHandle) {
     manager.transition(AppState::Processing, app);
     let app_clone = app.clone();
-    tokio::spawn(async move {
+    tauri::async_runtime::spawn(async move {
         crate::run_pipeline(app_clone).await;
     });
 }
@@ -129,7 +144,7 @@ fn handle_escape(manager: &AppStateManager, app: &AppHandle) {
         AppState::Recording => {
             manager.transition(AppState::Idle, app);
             let app_clone = app.clone();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 let sidecar_state = app_clone.state::<sidecar::SidecarState>();
                 if let Err(err) =
                     sidecar::sidecar_post(&sidecar_state, "/record/cancel", serde_json::json!({}))
@@ -144,4 +159,116 @@ fn handle_escape(manager: &AppStateManager, app: &AppHandle) {
         }
         _ => {}
     }
+}
+
+/// Parse a shortcut string like "Ctrl+Shift+Space" into a Shortcut.
+fn parse_shortcut(s: &str) -> Result<Shortcut, String> {
+    let parts: Vec<&str> = s.split('+').map(str::trim).collect();
+    if parts.is_empty() {
+        return Err("Empty shortcut string".to_string());
+    }
+
+    let mut modifiers = Modifiers::empty();
+    let key_str = parts.last().unwrap();
+
+    for &part in &parts[..parts.len() - 1] {
+        match part.to_lowercase().as_str() {
+            "ctrl" | "control" => modifiers |= Modifiers::CONTROL,
+            "shift" => modifiers |= Modifiers::SHIFT,
+            "alt" => modifiers |= Modifiers::ALT,
+            "super" | "cmd" | "meta" | "cmdorctrl" => modifiers |= Modifiers::SUPER,
+            other => return Err(format!("Unknown modifier: {other}")),
+        }
+    }
+
+    let code = match key_str.to_lowercase().as_str() {
+        "space" => Code::Space,
+        "f1" => Code::F1,
+        "f2" => Code::F2,
+        "f3" => Code::F3,
+        "f4" => Code::F4,
+        "f5" => Code::F5,
+        "f6" => Code::F6,
+        "f7" => Code::F7,
+        "f8" => Code::F8,
+        "f9" => Code::F9,
+        "f10" => Code::F10,
+        "f11" => Code::F11,
+        "f12" => Code::F12,
+        "a" => Code::KeyA,
+        "b" => Code::KeyB,
+        "c" => Code::KeyC,
+        "d" => Code::KeyD,
+        "e" => Code::KeyE,
+        "f" => Code::KeyF,
+        "g" => Code::KeyG,
+        "h" => Code::KeyH,
+        "i" => Code::KeyI,
+        "j" => Code::KeyJ,
+        "k" => Code::KeyK,
+        "l" => Code::KeyL,
+        "m" => Code::KeyM,
+        "n" => Code::KeyN,
+        "o" => Code::KeyO,
+        "p" => Code::KeyP,
+        "q" => Code::KeyQ,
+        "r" => Code::KeyR,
+        "s" => Code::KeyS,
+        "t" => Code::KeyT,
+        "u" => Code::KeyU,
+        "v" => Code::KeyV,
+        "w" => Code::KeyW,
+        "x" => Code::KeyX,
+        "y" => Code::KeyY,
+        "z" => Code::KeyZ,
+        other => return Err(format!("Unknown key: {other}")),
+    };
+
+    let mods = if modifiers.is_empty() { None } else { Some(modifiers) };
+    Ok(Shortcut::new(mods, code))
+}
+
+/// Update the main hotkey at runtime. Called from the frontend.
+#[tauri::command]
+pub fn update_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
+    let new_shortcut = parse_shortcut(&shortcut)?;
+    let state_manager = app.state::<AppStateManager>();
+    // Skip if the new shortcut is the same as current (avoids breaking the handler)
+    {
+        let current = state_manager.current_shortcut.lock().unwrap();
+        if let Some(ref current_shortcut) = *current {
+            if *current_shortcut == new_shortcut {
+                eprintln!("[aurotype] Hotkey unchanged: {shortcut}");
+                return Ok(());
+            }
+        }
+    }
+
+    // Unregister old shortcut
+    let old = state_manager.current_shortcut.lock().unwrap().take();
+    if let Some(old_shortcut) = old {
+        if let Err(e) = app.global_shortcut().unregister(old_shortcut) {
+            eprintln!("[aurotype] Failed to unregister old hotkey: {e}");
+        }
+    }
+
+    // Register new shortcut via on_shortcut (same pattern as register_hotkeys).
+    // CRITICAL: must use on_shortcut, not register, for the handler to fire on Windows.
+    if let Err(e) = app.global_shortcut().on_shortcut(new_shortcut, move |app, _shortcut, event| {
+        let state_manager = app.state::<AppStateManager>();
+        handle_main_hotkey(&state_manager, app, event.state());
+    }) {
+        // Try to re-register the default if the new one fails
+        let fallback = default_shortcut();
+        let _ = app.global_shortcut().on_shortcut(fallback, move |app, _shortcut, event| {
+            let state_manager = app.state::<AppStateManager>();
+            handle_main_hotkey(&state_manager, app, event.state());
+        });
+        *state_manager.current_shortcut.lock().unwrap() = Some(fallback);
+        return Err(format!("Failed to register hotkey '{shortcut}': {e}"));
+    }
+
+    *state_manager.current_shortcut.lock().unwrap() = Some(new_shortcut);
+    eprintln!("[aurotype] Hotkey changed to: {shortcut}");
+    Ok(())
 }
