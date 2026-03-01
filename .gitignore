@@ -36,3 +36,14 @@ engine/.venv/
 
 # Task artifacts
 .sisyphus/evidence/
+
+# Build artifacts
+engine/build/
+engine/dist/
+src-tauri/binaries/
+test-results/
+e2e/screenshots/
+
+# Dev logs
+vite-dev.log
+vite-dev-err.log
