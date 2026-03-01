@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "aurotype-engine"
 version = "0.1.0"
 requires-python = ">=3.12"
+license = "GPL-3.0-only"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
