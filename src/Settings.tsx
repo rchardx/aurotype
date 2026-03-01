@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import "./Settings.css";
@@ -17,11 +17,13 @@ interface SettingsData {
   hotkey: string;
   hotkey_mode: "hold" | "toggle";
   language: string;
+  system_prompt: string;
 }
 interface TranscriptionRecord {
   raw_text: string;
   polished_text: string;
   timestamp: string;
+  audio_file?: string;
 }
 
 
@@ -36,6 +38,7 @@ const defaultSettings: SettingsData = {
   hotkey: "Ctrl+Alt+Space",
   hotkey_mode: "hold",
   language: "auto",
+  system_prompt: "",
 };
 
 function CopyButton({ text }: { text: string }) {
@@ -57,6 +60,42 @@ function CopyButton({ text }: { text: string }) {
       onClick={handleCopy}
     >
       {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+function PlayButton({ audioFile }: { audioFile: string }) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handlePlay = async () => {
+    if (playing && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setPlaying(false);
+      return;
+    }
+    try {
+      const dataUrl = await invoke<string>("get_audio_data", { path: audioFile });
+      const audio = new Audio(dataUrl);
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => setPlaying(false);
+      setPlaying(true);
+      await audio.play();
+    } catch (e) {
+      console.error("Failed to play audio:", e);
+      setPlaying(false);
+    }
+  };
+
+  return (
+    <button
+      className={`history-play-btn ${playing ? "playing" : ""}`}
+      onClick={handlePlay}
+      title={playing ? "Stop" : "Play recording"}
+    >
+      {playing ? "\u25A0" : "\u25B6"}
     </button>
   );
 }
@@ -192,6 +231,87 @@ export default function SettingsPage() {
     <div className="settings-container">
       <h1><img src="/logo.png" alt="Aurotype" className="brand-logo" />Aurotype</h1>
 
+      {/* Engine Status Section (first) */}
+      <div className="section">
+        <div className="section-header">
+          Engine Status
+          <div style={{ display: 'flex', alignItems: 'center', fontSize: '14px' }}>
+            <span
+              className={`status-indicator ${
+                healthStatus ? "status-connected" : "status-disconnected"
+              }`}
+            />
+            {healthStatus ? "Connected" : "Disconnected"}
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Sidecar Status</label>
+          <p className="hint">
+            Check if the background engine is running correctly.
+          </p>
+        </div>
+        <button onClick={restartEngine} className="secondary" disabled={!healthStatus}>
+          Restart Engine
+        </button>
+      </div>
+
+      {/* History Section (second) */}
+      <div className="section">
+        <div className="section-header">
+          <span>
+            History
+            <span style={{ fontSize: '11px', color: '#888', fontWeight: 400, marginLeft: '8px' }}>
+              (keeps last 50 records)
+            </span>
+          </span>
+          <span style={{ display: 'flex', gap: '4px' }}>
+            <button 
+              className="secondary" 
+              style={{ fontSize: '12px', padding: '4px 8px' }}
+              onClick={loadHistory}
+            >
+              Refresh
+            </button>
+            {history.length > 0 && (
+              <button 
+                className="secondary" 
+                style={{ fontSize: '12px', padding: '4px 8px', color: '#e74c3c' }}
+                onClick={async () => {
+                  try {
+                    await invoke('clear_history');
+                    setHistory([]);
+                  } catch (e) {
+                    console.error('Failed to clear history:', e);
+                  }
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </span>
+        </div>
+        
+        {history.length === 0 ? (
+          <div className="history-empty">No recordings yet</div>
+        ) : (
+          <div className="history-list">
+            {history.map((record, index) => (
+              <div key={index} className="history-item">
+                <div className="history-header">
+                  <span className="history-timestamp">{record.timestamp}</span>
+                  <span className="history-actions">
+                    {record.audio_file && <PlayButton audioFile={record.audio_file} />}
+                    <CopyButton text={record.polished_text} />
+                  </span>
+                </div>
+                <div className="history-polished">{record.polished_text}</div>
+                <div className="history-raw">{record.raw_text}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* STT Provider Section */}
       <div className="section">
         <div className="section-header">STT Provider</div>
@@ -238,12 +358,9 @@ export default function SettingsPage() {
           >
             <option value="deepseek">DeepSeek (Default)</option>
             <option value="openai">OpenAI Compatible</option>
-            <option value="none">None</option>
           </select>
         </div>
 
-        {settings.llm_provider !== "none" && (
-          <>
             <div className="form-group">
               <label>API Key</label>
               <input
@@ -275,8 +392,19 @@ export default function SettingsPage() {
             <button onClick={testLlmConnection} className="secondary" disabled={!healthStatus}>
               {testLlmStatus || "Test Connection"}
             </button>
-          </>
-        )}
+            <div className="form-group">
+              <label>System Prompt</label>
+              <p className="hint">
+                Customize how the LLM polishes your transcription. Leave empty to use the default prompt.
+              </p>
+              <textarea
+                rows={5}
+                placeholder="You are a text polisher for voice transcription. Clean up the following speech transcription: remove filler words (um, uh, like, you know), fix grammar and punctuation, preserve meaning and tone. IMPORTANT: If the speaker mixes languages (e.g. Chinese with English words/phrases), keep the original language for each part as spoken. Do NOT translate English words into Chinese or vice versa. Preserve code terms, brand names, and technical jargon in their original language. Return ONLY the polished text, no explanations."
+                value={settings.system_prompt}
+                onChange={(e) => handleChange("system_prompt", e.target.value)}
+                style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '13px' }}
+              />
+            </div>
       </div>
 
       {/* Hotkey Section */}
@@ -344,62 +472,6 @@ export default function SettingsPage() {
             <option value="de">German</option>
           </select>
         </div>
-      </div>
-      {/* History Section */}
-      <div className="section">
-        <div className="section-header">
-          History
-          <button 
-            className="secondary" 
-            style={{ fontSize: '12px', padding: '4px 8px' }}
-            onClick={loadHistory}
-          >
-            Refresh
-          </button>
-        </div>
-        
-        {history.length === 0 ? (
-          <div className="history-empty">No recordings yet</div>
-        ) : (
-          <div className="history-list">
-            {history.map((record, index) => (
-              <div key={index} className="history-item">
-                <div className="history-header">
-                  <span className="history-timestamp">{record.timestamp}</span>
-                  <CopyButton text={record.polished_text} />
-                </div>
-                <div className="history-polished">{record.polished_text}</div>
-                <div className="history-raw">{record.raw_text}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-
-
-      {/* Advanced Section */}
-      <div className="section">
-        <div className="section-header">
-          Advanced
-          <div style={{ display: 'flex', alignItems: 'center', fontSize: '14px' }}>
-            <span
-              className={`status-indicator ${
-                healthStatus ? "status-connected" : "status-disconnected"
-              }`}
-            />
-            {healthStatus ? "Connected" : "Disconnected"}
-          </div>
-        </div>
-        <div className="form-group">
-          <label>Sidecar Status</label>
-          <p className="hint">
-            Check if the background engine is running correctly.
-          </p>
-        </div>
-        <button onClick={restartEngine} className="secondary" disabled={!healthStatus}>
-          Restart Engine
-        </button>
       </div>
     </div>
   );

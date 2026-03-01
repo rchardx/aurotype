@@ -11,16 +11,6 @@ interface StateChangedPayload {
   message?: string;
 }
 
-// Inline Icons
-const MicIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mic-icon">
-    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-    <line x1="12" y1="19" x2="12" y2="23" />
-    <line x1="8" y1="23" x2="16" y2="23" />
-  </svg>
-);
-
 const CheckIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="injecting-icon">
     <polyline points="20 6 9 17 4 12" />
@@ -185,9 +175,6 @@ export default function FloatWindow() {
     }
   };
 
-  // Calculate volume rotation for the ring (0 to 360 degrees)
-  const volumeDeg = Math.min(Math.max(volume * 360, 0), 360);
-
   const handleCopy = async () => {
     await invoke('copy_to_clipboard', { text: copyText });
     handleStateChange('idle');
@@ -200,31 +187,23 @@ export default function FloatWindow() {
         {/* Pulse animation ring (only when recording) */}
         {appState === 'recording' && <div className="pulse-ring" />}
 
-        {/* Volume indicator ring (SVG) */}
-        {appState === 'recording' && (
-          <svg className="volume-ring" width="70" height="70" viewBox="0 0 70 70">
-             <circle 
-              cx="35" cy="35" r="33" 
-              fill="transparent" 
-              stroke="rgba(255, 255, 255, 0.1)" 
-              strokeWidth="3" 
-            />
-            <circle 
-              cx="35" cy="35" r="33" 
-              fill="transparent" 
-              stroke="#ff3b30" 
-              strokeWidth="3" 
-              strokeDasharray={`${(volumeDeg / 360) * 207} 207`} // 2 * PI * 33 ≈ 207
-              strokeDashoffset="0"
-              strokeLinecap="round"
-              transform="rotate(-90 35 35)"
-            />
-          </svg>
-        )}
 
         {/* Central Icon */}
         <div className="icon-center">
-          {appState === 'recording' && <MicIcon />}
+          {appState === 'recording' ? (
+            <div className="waveform-bars">
+              {[0.4, 0.6, 0.8, 1.0, 0.8, 0.6, 0.4].map((multiplier, i) => (
+                <div 
+                  key={i} 
+                  className="wave-bar" 
+                  style={{ 
+                    height: `${Math.max(8, volume * 120 * multiplier)}px`,
+                    animationDelay: `${i * 0.1}s`
+                  }} 
+                />
+              ))}
+            </div>
+          ) : null}
           {appState === 'processing' && <div className="spinner" />}
           {appState === 'injecting' && <CheckIcon />}
           {appState === 'error' && <ErrorIcon />}
@@ -241,7 +220,7 @@ export default function FloatWindow() {
           </>
         )}
         {appState === 'processing' && (
-           <div className="status-label">Processing...</div>
+           <div className="status-label transcribing">Transcribing...</div>
         )}
         {appState === 'injecting' && (
            <div className="status-label success">Complete</div>
