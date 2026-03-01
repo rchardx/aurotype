@@ -41,7 +41,7 @@ make setup          # bun install && cd engine && uv sync
 make dev            # bun run tauri dev
 
 # Build release installer
-powershell -ExecutionPolicy Bypass -File build.ps1
+bun run tauri build
 ```
 
 ## Development

@@ -217,11 +217,11 @@ use crate::state::{AppState, AppStateManager};
 | React float overlay | `src/FloatWindow.tsx` |
 | Vite config (multi-page) | `vite.config.ts` |
 | PyInstaller spec (onefile) | `engine/aurotype-engine.spec` |
-| Full build script | `build.ps1` |
+| Full build script | `build.ps1` (local, not tracked) |
 | Playwright config | `playwright.config.ts` |
 | Playwright GUI tests | `e2e/gui-debug.spec.ts` |
-| Debug launch script | `debug-run.ps1` |
-| Vite dev server launcher | `start-vite.ps1` |
+| Debug launch script | `debug-run.ps1` (local, not tracked) |
+| Vite dev server launcher | `start-vite.ps1` (local, not tracked) |
 
 ## Dev & Debug Workflow (Windows)
 
