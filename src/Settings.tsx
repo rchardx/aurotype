@@ -140,8 +140,9 @@ export default function SettingsPage() {
           await store.set("config", migrated);
           await store.save();
         }
+      } else {
+        setPromptDraft(DEFAULT_SYSTEM_PROMPT);
       }
-      setPromptDraft(DEFAULT_SYSTEM_PROMPT);
     } catch (e) {
       console.error("Failed to load settings:", e);
     } finally {
