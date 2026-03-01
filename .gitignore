@@ -34,8 +34,8 @@ engine/.venv/
 *.sln
 *.sw?
 
-# Task artifacts
-.sisyphus/evidence/
+# AI tool artifacts
+.sisyphus/
 
 # Build artifacts
 engine/build/
