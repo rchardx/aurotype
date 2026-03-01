@@ -12,7 +12,7 @@
 
 ---
 
-**Aurotype** is a desktop application built with Tauri 2 (Rust) + React/TypeScript + Python sidecar. Press a hotkey, speak, and the transcribed & polished text is automatically inserted at your cursor position.
+**Aurotype** is a desktop app built with Tauri 2 (Rust) + React/TypeScript + a Python sidecar. Press a hotkey, speak, and the transcribed & polished text is automatically inserted at your cursor position.
 
 ## Features
 
@@ -27,24 +27,13 @@
 
 ```
 src/              → React 19 + TypeScript frontend (Vite 7)
-src-tauri/src/    → Rust/Tauri 2 backend (hotkeys, tray, sidecar management, text injection)
+src-tauri/src/    → Rust/Tauri 2 backend (hotkeys, tray, sidecar, text injection)
 engine/           → Python 3.12 sidecar (FastAPI + uvicorn, STT/LLM providers)
 ```
 
-## Quick Start
+Tauri spawns the Python engine as a sidecar process. They communicate over HTTP on localhost (dynamic port).
 
-```bash
-# Install dependencies
-make setup          # bun install && cd engine && uv sync
-
-# Run in development mode
-make dev            # bun run tauri dev
-
-# Build release installer
-bun run tauri build
-```
-
-## Development
+## Getting Started
 
 ### Prerequisites
 
@@ -52,49 +41,52 @@ bun run tauri build
 - [Rust](https://rustup.rs/) (stable)
 - [Python 3.12+](https://www.python.org/) with [uv](https://docs.astral.sh/uv/)
 
-### Setup
+### Setup & Run
 
 ```bash
 make setup          # Install frontend + Python dependencies
-```
-
-### Running
-
-```bash
 make dev            # Run full app (Tauri + Vite + Python sidecar)
-make engine-dev     # Run Python engine standalone
 ```
 
-## Testing
+To run the Python engine standalone: `make engine-dev`
 
-### Python Engine Tests
+To build a release installer: `bun run tauri build`
+
+## Configuration
+
+Most settings are configurable from the in-app Settings page. Alternatively, use environment variables with the `AUROTYPE_` prefix:
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUROTYPE_STT_PROVIDER` | `dashscope` | Speech-to-text provider |
+| `AUROTYPE_LLM_PROVIDER` | `deepseek` | LLM provider for text polishing |
+| `AUROTYPE_DASHSCOPE_API_KEY` | — | DashScope API key (for STT) |
+| `AUROTYPE_DEEPSEEK_API_KEY` | — | DeepSeek API key |
+| `AUROTYPE_OPENAI_API_KEY` | — | OpenAI-compatible API key |
+| `AUROTYPE_LLM_BASE_URL` | — | Custom LLM endpoint URL |
+| `AUROTYPE_LLM_MODEL` | — | Override LLM model name |
+| `AUROTYPE_SYSTEM_PROMPT` | — | Custom system prompt for polishing |
+| `AUROTYPE_LANGUAGE` | `auto` | Target language |
+
+## Development
+
+### Testing
 
 ```bash
-cd engine && uv run pytest ../tests/ -v          # Run all tests
-cd engine && uv run pytest ../tests/test_pipeline.py -v  # Single file
+# Python
+cd engine && uv run pytest ../tests/ -v
+
+# TypeScript
+bunx tsc --noEmit
+
+# Rust
+cd src-tauri && cargo test
+cd src-tauri && cargo clippy -- -D warnings
 ```
 
-### TypeScript Type Check
+### CI
 
-```bash
-bun run build       # Full build (tsc + vite)
-```
-
-### Rust
-
-```bash
-cd src-tauri && cargo test      # Run Rust tests
-cd src-tauri && cargo clippy    # Lint
-```
-
-## CI
-
-GitHub Actions runs on every push to `main` and on pull requests:
-
-- **Python Tests** — pytest across all engine unit tests
-- **TypeScript Check** — `tsc --noEmit` type verification
-- **Rust Check** — `cargo check` + `cargo clippy -D warnings`
-
+GitHub Actions runs on every push to `main` and on pull requests: Python tests, TypeScript type check, Rust check + clippy.
 
 ## License
 
