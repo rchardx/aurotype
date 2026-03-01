@@ -12,7 +12,7 @@ body {
   width: 100vw;
   height: 100vh;
   display: flex;
-  justify-content: flex-start; /* Aligned left to allow growth to right */
+  justify-content: center;
   align-items: center;
   background-color: transparent !important;
   overflow: hidden;
@@ -23,17 +23,14 @@ body {
   display: flex;
   align-items: center;
   padding: 8px;
-  /* Ensure it fits in 80px height */
   height: 100%;
+  width: 100%;
   box-sizing: border-box;
 }
 .float-wrapper:not(.idle) {
-  background: rgba(20, 20, 22, 0.65);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(20, 20, 22, 0.85);
   border-radius: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   padding: 12px 20px 12px 12px;
 }
 
