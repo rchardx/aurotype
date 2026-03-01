@@ -6,17 +6,20 @@ from typing import Protocol
 from .llm_base import LLMProvider
 from .llm_none import NoneLLMProvider
 from .llm_openai import OpenAILLMProvider
-from .llm_siliconflow import SiliconFlowLLMProvider
+
+from .llm_deepseek import DeepSeekLLMProvider
 
 
 class LLMProviderConfig(Protocol):
     openai_api_key: str | None
-    siliconflow_api_key: str | None
+    deepseek_api_key: str | None
+    llm_base_url: str | None
+    llm_model: str | None
 
 
 LLM_PROVIDER_REGISTRY: dict[str, Callable[[LLMProviderConfig], LLMProvider]] = {
     "openai": OpenAILLMProvider,
-    "siliconflow": SiliconFlowLLMProvider,
+    "deepseek": DeepSeekLLMProvider,
     "none": NoneLLMProvider,
 }
 

@@ -11,10 +11,11 @@ from .stt_base import STTProvider
 class DashScopeSTTProvider(STTProvider):
     class _Config(Protocol):
         dashscope_api_key: str | None
+        stt_model: str | None
 
     def __init__(self, config: _Config):
         self._api_key: str = config.dashscope_api_key or ""
-        self._model: Final[str] = "paraformer-realtime-v2"
+        self._model: str = config.stt_model or "paraformer-realtime-v2"
 
     @override
     async def transcribe(self, audio_bytes: bytes, language: str = "auto") -> str:
@@ -43,9 +44,12 @@ class DashScopeSTTProvider(STTProvider):
             language_hints = [language]
 
         # Write audio bytes to a temp file since the SDK expects a file path
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+        # On Windows, delete=True prevents other processes from reading the file
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        try:
             _ = tmp.write(audio_bytes)
             tmp.flush()
+            tmp.close()  # Close before passing to SDK so it can read the file
 
             recognition = Recognition(
                 model=self._model,
@@ -55,6 +59,12 @@ class DashScopeSTTProvider(STTProvider):
                 callback=None,
             )
             result = recognition.call(tmp.name)
+        finally:
+            import os
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
 
         if result.status_code != HTTPStatus.OK:
             raise RuntimeError(

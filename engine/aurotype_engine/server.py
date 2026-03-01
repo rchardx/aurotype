@@ -29,11 +29,13 @@ class PolishRequest(BaseModel):
 
 class ConfigureRequest(BaseModel):
     stt_provider: str | None = None
-    deepgram_api_key: str | None = None
+    stt_model: str | None = None
     llm_provider: str | None = None
     openai_api_key: str | None = None
-    siliconflow_api_key: str | None = None
     dashscope_api_key: str | None = None
+    deepseek_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
     language: str | None = None
 
 
@@ -87,6 +89,37 @@ async def configure(payload: ConfigureRequest):
     return {"status": "configured"}
 
 
+@app.post("/test-llm")
+async def test_llm():
+    """Test the current LLM provider with a short prompt."""
+    cfg = get_effective_settings()
+    try:
+        llm = get_llm_provider(cfg.llm_provider, cfg)
+        result = await llm.polish("Hello, this is a test.", language="en")
+        return {"status": "ok", "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/test-stt")
+async def test_stt():
+    """Test the current STT provider by instantiating it and verifying credentials."""
+    cfg = get_effective_settings()
+    try:
+        stt = get_stt_provider(cfg.stt_provider, cfg)
+        # Send a tiny silent WAV to verify the provider works
+        import io
+        import wave
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b"\x00\x00" * 1600)  # 0.1s silence
+        result = await stt.transcribe(buf.getvalue(), language="en")
+        return {"status": "ok", "result": result}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 @app.post("/record/start")
 async def start_recording():
     try:
