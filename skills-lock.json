@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-browser": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "a7235898c50422ed8d3cf43cb640ecb591cce3220cf88d31256a59c16a20d8ea"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "25872a21881a950edc3db1f3329664d60405d539660ce05b3265db2de06a7dfd"
+    },
+    "skill-creator": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "0bed02ada25ac9b22bef1b495dda21343404c023692b3217fe1be4616c145dc1"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "d8e7d3afe37dcc8a97b99ffb5afdb4d0919ae0092ea8b68f44eb201f035e33ac"
+    }
+  }
+}
