@@ -6,6 +6,8 @@ Output:      engine/dist/aurotype-engine/aurotype-engine
 """
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+import sys
+use_upx = sys.platform != 'darwin'
 
 # sounddevice ships portaudio shared libs that must be bundled
 sounddevice_datas = collect_data_files("sounddevice")
@@ -81,7 +83,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=use_upx,
     upx_exclude=[],
     console=False,
 )
