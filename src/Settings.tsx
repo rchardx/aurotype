@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import "./Settings.css";
 
@@ -112,13 +113,26 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
     loadHistory();
-    checkHealth();
-    // Poll health every 5 seconds
-    const healthInterval = setInterval(() => {
-      checkHealth();
+    // Poll history every 5 seconds (not event-driven)
+    const historyInterval = setInterval(() => {
       loadHistory();
     }, 5000);
-    return () => clearInterval(healthInterval);
+    return () => clearInterval(historyInterval);
+  }, []);
+
+  // Listen for sidecar-status events from Rust backend
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const setup = async () => {
+      // Check health once on mount
+      checkHealth();
+      // Then listen for status events from Rust
+      unlisten = await listen<{ healthy: boolean }>("sidecar-status", (event) => {
+        setHealthStatus(event.payload.healthy);
+      });
+    };
+    setup();
+    return () => { if (unlisten) unlisten(); };
   }, []);
 
   const loadSettings = async () => {

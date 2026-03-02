@@ -35,6 +35,7 @@ impl SidecarState {
 pub fn spawn_sidecar(app: AppHandle) -> Result<SidecarState, Box<dyn std::error::Error>> {
     let state = SidecarState::new();
     start_sidecar_process(&app, &state)?;
+    let _ = app.emit("sidecar-status", serde_json::json!({"healthy": true}));
     start_health_check_loop(app, state.clone());
     Ok(state)
 }
@@ -248,9 +249,11 @@ fn start_health_check_loop(app: AppHandle, state: SidecarState) {
             match sidecar_get(&state, "/health").await {
                 Ok(_) => {
                     consecutive_failures = 0;
+                    let _ = app.emit("sidecar-status", serde_json::json!({"healthy": true}));
                 }
                 Err(err) => {
                     consecutive_failures = consecutive_failures.saturating_add(1);
+                    let _ = app.emit("sidecar-status", serde_json::json!({"healthy": false}));
 
                     if consecutive_failures >= 3 {
                         eprintln!(
