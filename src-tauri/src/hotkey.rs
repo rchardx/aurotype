@@ -277,3 +277,85 @@ pub fn update_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
     eprintln!("[aurotype] Hotkey changed to: {shortcut}");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tauri_plugin_global_shortcut::{Code, Modifiers};
+
+    #[test]
+    fn parse_ctrl_alt_space() {
+        let shortcut = parse_shortcut("Ctrl+Alt+Space").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::CONTROL | Modifiers::ALT);
+        assert_eq!(shortcut.key, Code::Space);
+    }
+
+    #[test]
+    fn parse_ctrl_shift_space() {
+        let shortcut = parse_shortcut("Ctrl+Shift+Space").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::CONTROL | Modifiers::SHIFT);
+        assert_eq!(shortcut.key, Code::Space);
+    }
+
+    #[test]
+    fn parse_cmdorctrl_shift_a() {
+        let shortcut = parse_shortcut("CmdOrCtrl+Shift+A").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::SUPER | Modifiers::SHIFT);
+        assert_eq!(shortcut.key, Code::KeyA);
+    }
+
+    #[test]
+    fn parse_cmdorctrl_shift_r() {
+        let shortcut = parse_shortcut("CmdOrCtrl+Shift+R").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::SUPER | Modifiers::SHIFT);
+        assert_eq!(shortcut.key, Code::KeyR);
+    }
+
+    #[test]
+    fn parse_cmdorctrl_shift_v() {
+        let shortcut = parse_shortcut("CmdOrCtrl+Shift+V").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::SUPER | Modifiers::SHIFT);
+        assert_eq!(shortcut.key, Code::KeyV);
+    }
+
+    #[test]
+    fn parse_cmdorctrl_space() {
+        let shortcut = parse_shortcut("CmdOrCtrl+Space").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::SUPER);
+        assert_eq!(shortcut.key, Code::Space);
+    }
+
+    #[test]
+    fn parse_f9() {
+        let shortcut = parse_shortcut("F9").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::empty());
+        assert_eq!(shortcut.key, Code::F9);
+    }
+
+    #[test]
+    fn parse_f10() {
+        let shortcut = parse_shortcut("F10").unwrap();
+        assert_eq!(shortcut.mods, Modifiers::empty());
+        assert_eq!(shortcut.key, Code::F10);
+    }
+
+    #[test]
+    fn parse_empty_string_is_err() {
+        let result = parse_shortcut("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_unknown_modifier_is_err() {
+        let result = parse_shortcut("UnknownMod+Space");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown modifier"));
+    }
+
+    #[test]
+    fn parse_unknown_key_is_err() {
+        let result = parse_shortcut("Ctrl+UnknownKey");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown key"));
+    }
+}

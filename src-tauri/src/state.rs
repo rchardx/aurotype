@@ -215,3 +215,270 @@ impl AppStateManager {
         let _ = app.emit("state-changed", payload);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_record(raw: &str, polished: &str, ts: &str) -> TranscriptionRecord {
+        TranscriptionRecord {
+            raw_text: raw.to_string(),
+            polished_text: polished.to_string(),
+            timestamp: ts.to_string(),
+            audio_file: None,
+        }
+    }
+
+    // --- AppState::as_str tests ---
+
+    #[test]
+    fn as_str_idle() {
+        assert_eq!(AppState::Idle.as_str(), "idle");
+    }
+
+    #[test]
+    fn as_str_recording() {
+        assert_eq!(AppState::Recording.as_str(), "recording");
+    }
+
+    #[test]
+    fn as_str_processing() {
+        assert_eq!(AppState::Processing.as_str(), "processing");
+    }
+
+    #[test]
+    fn as_str_injecting() {
+        assert_eq!(AppState::Injecting.as_str(), "injecting");
+    }
+
+    #[test]
+    fn as_str_copy_available() {
+        assert_eq!(
+            AppState::CopyAvailable("text".to_string()).as_str(),
+            "copy_available"
+        );
+    }
+
+    #[test]
+    fn as_str_error() {
+        assert_eq!(AppState::Error("oops".to_string()).as_str(), "error");
+    }
+
+    // --- AppState::message tests ---
+
+    #[test]
+    fn message_idle_returns_none() {
+        assert_eq!(AppState::Idle.message(), None);
+    }
+
+    #[test]
+    fn message_recording_returns_none() {
+        assert_eq!(AppState::Recording.message(), None);
+    }
+
+    #[test]
+    fn message_processing_returns_none() {
+        assert_eq!(AppState::Processing.message(), None);
+    }
+
+    #[test]
+    fn message_injecting_returns_none() {
+        assert_eq!(AppState::Injecting.message(), None);
+    }
+
+    #[test]
+    fn message_error_returns_some() {
+        let msg = "something went wrong".to_string();
+        assert_eq!(AppState::Error(msg.clone()).message(), Some(msg));
+    }
+
+    #[test]
+    fn message_copy_available_returns_some() {
+        let text = "copied text".to_string();
+        assert_eq!(AppState::CopyAvailable(text.clone()).message(), Some(text));
+    }
+
+    // --- AppStateManager::new tests ---
+
+    #[test]
+    fn new_manager_initial_state_is_idle() {
+        let manager = AppStateManager::new();
+        assert_eq!(manager.get(), AppState::Idle);
+    }
+
+    #[test]
+    fn new_manager_initial_mode_is_toggle() {
+        let manager = AppStateManager::new();
+        let mode = manager.mode.lock().unwrap().clone();
+        assert_eq!(mode, HotkeyMode::Toggle);
+    }
+
+    #[test]
+    fn new_manager_initial_shortcut_is_none() {
+        let manager = AppStateManager::new();
+        let shortcut = manager.current_shortcut.lock().unwrap().clone();
+        assert!(shortcut.is_none());
+    }
+
+    #[test]
+    fn new_manager_engine_recording_is_false() {
+        let manager = AppStateManager::new();
+        assert!(!manager.engine_recording.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    // --- AppStateManager::get tests ---
+
+    #[test]
+    fn get_returns_cloned_state() {
+        let manager = AppStateManager::new();
+        {
+            let mut state = manager.state.lock().unwrap();
+            *state = AppState::Recording;
+        }
+        assert_eq!(manager.get(), AppState::Recording);
+    }
+
+    #[test]
+    fn get_returns_error_state_with_message() {
+        let manager = AppStateManager::new();
+        {
+            let mut state = manager.state.lock().unwrap();
+            *state = AppState::Error("fail".to_string());
+        }
+        assert_eq!(manager.get(), AppState::Error("fail".to_string()));
+    }
+
+    // --- History (in-memory) tests ---
+
+    #[test]
+    fn get_history_initially_empty() {
+        let manager = AppStateManager::new();
+        assert!(manager.get_history().is_empty());
+    }
+
+    #[test]
+    fn history_add_record_directly() {
+        let manager = AppStateManager::new();
+        let record = make_record("hello", "Hello.", "2025-01-01T00:00:00Z");
+        {
+            let mut history = manager.history.lock().unwrap();
+            history.push(record);
+        }
+        let records = manager.get_history();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].raw_text, "hello");
+        assert_eq!(records[0].polished_text, "Hello.");
+        assert_eq!(records[0].timestamp, "2025-01-01T00:00:00Z");
+        assert!(records[0].audio_file.is_none());
+    }
+
+    #[test]
+    fn history_50_record_cap() {
+        let manager = AppStateManager::new();
+        {
+            let mut history = manager.history.lock().unwrap();
+            for i in 0..51 {
+                history.push(make_record(
+                    &format!("raw_{i}"),
+                    &format!("polished_{i}"),
+                    &format!("ts_{i}"),
+                ));
+            }
+            // Simulate the same eviction logic as add_history
+            while history.len() > 50 {
+                history.remove(0);
+            }
+        }
+        let records = manager.get_history();
+        assert_eq!(records.len(), 50);
+        // First record (raw_0) was evicted; oldest remaining is raw_1
+        assert_eq!(records[0].raw_text, "raw_1");
+        assert_eq!(records[49].raw_text, "raw_50");
+    }
+
+    #[test]
+    fn history_clear_directly() {
+        let manager = AppStateManager::new();
+        {
+            let mut history = manager.history.lock().unwrap();
+            history.push(make_record("a", "A", "ts1"));
+            history.push(make_record("b", "B", "ts2"));
+        }
+        assert_eq!(manager.get_history().len(), 2);
+        {
+            let mut history = manager.history.lock().unwrap();
+            history.clear();
+        }
+        assert!(manager.get_history().is_empty());
+    }
+
+    #[test]
+    fn history_multiple_records_order_preserved() {
+        let manager = AppStateManager::new();
+        {
+            let mut history = manager.history.lock().unwrap();
+            history.push(make_record("first", "First.", "ts1"));
+            history.push(make_record("second", "Second.", "ts2"));
+            history.push(make_record("third", "Third.", "ts3"));
+        }
+        let records = manager.get_history();
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].raw_text, "first");
+        assert_eq!(records[1].raw_text, "second");
+        assert_eq!(records[2].raw_text, "third");
+    }
+
+    #[test]
+    fn history_record_with_audio_file() {
+        let manager = AppStateManager::new();
+        {
+            let mut history = manager.history.lock().unwrap();
+            history.push(TranscriptionRecord {
+                raw_text: "voice".to_string(),
+                polished_text: "Voice.".to_string(),
+                timestamp: "ts".to_string(),
+                audio_file: Some("/tmp/audio.wav".to_string()),
+            });
+        }
+        let records = manager.get_history();
+        assert_eq!(records[0].audio_file, Some("/tmp/audio.wav".to_string()));
+    }
+
+    // --- HotkeyMode tests ---
+
+    #[test]
+    fn hotkey_mode_toggle_equality() {
+        assert_eq!(HotkeyMode::Toggle, HotkeyMode::Toggle);
+        assert_ne!(HotkeyMode::Toggle, HotkeyMode::HoldToRecord);
+    }
+
+    #[test]
+    fn hotkey_mode_hold_to_record_equality() {
+        assert_eq!(HotkeyMode::HoldToRecord, HotkeyMode::HoldToRecord);
+        assert_ne!(HotkeyMode::HoldToRecord, HotkeyMode::Toggle);
+    }
+
+    // --- AppState equality tests ---
+
+    #[test]
+    fn app_state_equality() {
+        assert_eq!(AppState::Idle, AppState::Idle);
+        assert_ne!(AppState::Idle, AppState::Recording);
+        assert_eq!(
+            AppState::Error("x".to_string()),
+            AppState::Error("x".to_string())
+        );
+        assert_ne!(
+            AppState::Error("x".to_string()),
+            AppState::Error("y".to_string())
+        );
+        assert_eq!(
+            AppState::CopyAvailable("t".to_string()),
+            AppState::CopyAvailable("t".to_string())
+        );
+        assert_ne!(
+            AppState::CopyAvailable("a".to_string()),
+            AppState::CopyAvailable("b".to_string())
+        );
+    }
+}
