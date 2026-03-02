@@ -22,7 +22,7 @@ endif
 build-engine:
 	cd engine && uv run pyinstaller aurotype-engine.spec --noconfirm
 	mkdir -p src-tauri/binaries
-	cp engine/dist/aurotype-engine/aurotype-engine$(EXE_EXT) src-tauri/binaries/aurotype-engine-$(TRIPLE)$(EXE_EXT)
+	cp engine/dist/aurotype-engine$(EXE_EXT) src-tauri/binaries/aurotype-engine-$(TRIPLE)$(EXE_EXT)
 
 # macOS code signing for release distribution
 # Set APPLE_SIGNING_IDENTITY to enable (e.g., "Developer ID Application: Your Name (TEAM_ID)")
