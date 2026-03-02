@@ -293,9 +293,62 @@ fn stop_current_sidecar(state: &SidecarState) {
     };
 
     if let Some(child) = maybe_child {
-        if let Err(err) = child.kill() {
-            eprintln!("[aurotype] Failed to kill sidecar: {err}");
+        let pid = child.pid();
+        eprintln!("[aurotype] Stopping sidecar (pid={pid})");
+
+        // Collect child PIDs before killing the parent process.
+        // PyInstaller onefile mode spawns a child process; once the parent
+        // dies the child is reparented to launchd and we lose the link.
+        #[cfg(unix)]
+        let child_pids: Vec<String> = std::process::Command::new("pgrep")
+            .args(["-P", &pid.to_string()])
+            .output()
+            .map(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .split_whitespace()
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Use system kill commands — CommandChild::kill() is unreliable for
+        // PyInstaller process trees on macOS.
+        #[cfg(unix)]
+        {
+            // SIGTERM parent + children for graceful shutdown
+            let _ = std::process::Command::new("kill")
+                .args(["-TERM", &pid.to_string()])
+                .status();
+            for cpid in &child_pids {
+                let _ = std::process::Command::new("kill")
+                    .args(["-TERM", cpid])
+                    .status();
+            }
+
+            // Brief wait for graceful exit
+            std::thread::sleep(Duration::from_millis(500));
+
+            // Force kill everything that survived
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .status();
+            for cpid in &child_pids {
+                let _ = std::process::Command::new("kill")
+                    .args(["-9", cpid])
+                    .status();
+            }
         }
+
+        #[cfg(windows)]
+        {
+            // taskkill /T kills the full process tree
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .status();
+        }
+
+        // Belt-and-suspenders: also call CommandChild::kill()
+        let _ = child.kill();
     }
 }
 

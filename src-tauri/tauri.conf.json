@@ -29,7 +29,8 @@
         "focusable": false,
         "skipTaskbar": true,
         "transparent": true,
-        "shadow": false
+        "shadow": false,
+        "backgroundColor": "#00000000"
       }
     ],
     "security": {

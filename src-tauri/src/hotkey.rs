@@ -103,26 +103,33 @@ fn handle_main_hotkey(
 
 fn start_recording(manager: &AppStateManager, app: &AppHandle) {
     let _ = injection::capture_foreground_window();
+    manager.engine_recording.store(false, std::sync::atomic::Ordering::SeqCst);
     manager.transition(AppState::Recording, app);
 
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
         let sidecar_state = app_clone.state::<sidecar::SidecarState>();
-        if let Err(err) = sidecar::sidecar_post(&sidecar_state, "/record/start", serde_json::json!({})).await {
-            let state_mgr = app_clone.state::<AppStateManager>();
-            eprintln!("[aurotype] Failed to start recording: {err}");
-            let err_lower = err.to_lowercase();
-            let error_msg = if err_lower.contains("audiodeviceerror")
-                || err_lower.contains("no default input device")
-                || err_lower.contains("audio")
-            {
-                "No microphone found".to_string()
-            } else {
-                format!("Failed to start recording: {err}")
-            };
-            state_mgr.transition(AppState::Error(error_msg), &app_clone);
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            state_mgr.transition(AppState::Idle, &app_clone);
+        match sidecar::sidecar_post(&sidecar_state, "/record/start", serde_json::json!({})).await {
+            Ok(_) => {
+                let state_mgr = app_clone.state::<AppStateManager>();
+                state_mgr.engine_recording.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            Err(err) => {
+                let state_mgr = app_clone.state::<AppStateManager>();
+                eprintln!("[aurotype] Failed to start recording: {err}");
+                let err_lower = err.to_lowercase();
+                let error_msg = if err_lower.contains("audiodeviceerror")
+                    || err_lower.contains("no default input device")
+                    || err_lower.contains("audio")
+                {
+                    "No microphone found".to_string()
+                } else {
+                    format!("Failed to start recording: {err}")
+                };
+                state_mgr.transition(AppState::Error(error_msg), &app_clone);
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                state_mgr.transition(AppState::Idle, &app_clone);
+            }
         }
     });
 }

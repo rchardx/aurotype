@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::Shortcut;
@@ -67,6 +68,8 @@ pub struct AppStateManager {
     pub mode: Arc<Mutex<HotkeyMode>>,
     pub current_shortcut: Arc<Mutex<Option<Shortcut>>>,
     pub history: Arc<Mutex<Vec<TranscriptionRecord>>>,
+    /// `true` after POST `/record/start` succeeds; `run_pipeline` waits on this.
+    pub engine_recording: Arc<AtomicBool>,
 }
 
 impl AppStateManager {
@@ -76,6 +79,7 @@ impl AppStateManager {
             mode: Arc::new(Mutex::new(HotkeyMode::HoldToRecord)),
             current_shortcut: Arc::new(Mutex::new(None)),
             history: Arc::new(Mutex::new(Vec::new())),
+            engine_recording: Arc::new(AtomicBool::new(false)),
         }
     }
 

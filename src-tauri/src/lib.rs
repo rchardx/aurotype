@@ -1,5 +1,6 @@
 mod hotkey;
 mod injection;
+mod permissions;
 mod sidecar;
 mod state;
 mod tray;
@@ -9,11 +10,28 @@ use tauri::Manager;
 use tauri_plugin_store::StoreExt;
 
 pub async fn run_pipeline(app: tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
     use std::time::Duration;
     use tokio::time::timeout;
 
     let sidecar = app.state::<sidecar::SidecarState>();
     let state_mgr = app.state::<AppStateManager>();
+
+    // Wait for POST /record/start to complete before sending /record/stop.
+    // Without this gate the stop request can arrive before the engine has
+    // actually begun recording, producing empty audio.
+    let engine_recording = state_mgr.engine_recording.clone();
+    let wait_start = tokio::time::Instant::now();
+    while !engine_recording.load(Ordering::SeqCst) {
+        if wait_start.elapsed() > Duration::from_secs(5) {
+            eprintln!("[aurotype] Timed out waiting for engine to start recording");
+            state_mgr.transition(AppState::Error("Recording failed to start".to_string()), &app);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            state_mgr.transition(AppState::Idle, &app);
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 
     let result = timeout(
         Duration::from_secs(60),
@@ -87,9 +105,24 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 return;
             }
 
-            if let Err(e) = injection::inject_text(&polished) {
+            // Dispatch inject_text to the main thread — macOS enigo APIs
+            // (TSMGetInputSourceProperty) abort if called from a tokio worker.
+            let polished_for_inject = polished.clone();
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            if let Err(e) = app.run_on_main_thread(move || {
+                let result = injection::inject_text(&polished_for_inject);
+                let _ = tx.send(result);
+            }) {
+                eprintln!("[aurotype] Failed to dispatch injection to main thread: {e}");
+                state_mgr.transition(AppState::CopyAvailable(polished), &app);
+                return;
+            }
+            let inject_result = match rx.await {
+                Ok(r) => r,
+                Err(_) => Err("injection channel closed".to_string()),
+            };
+            if let Err(e) = inject_result {
                 eprintln!("[aurotype] Injection error (offering copy): {e}");
-                // Instead of showing error, offer copy fallback
                 state_mgr.transition(AppState::CopyAvailable(polished), &app);
                 return;
             }
@@ -356,6 +389,10 @@ pub fn run() {
             get_audio_data,
         ])
         .setup(|app| {
+            // Request microphone permission before spawning the sidecar so the
+            // system dialog appears immediately, not during the first recording.
+            permissions::request_microphone_permission();
+
             let sidecar_state = sidecar::spawn_sidecar(app.handle().clone())
                 .map_err(|err| std::io::Error::other(format!("failed to spawn sidecar: {err}")))?;
             app.manage(sidecar_state);

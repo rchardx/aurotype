@@ -4150,8 +4150,11 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "base64 0.22.1",
+ "block2 0.6.2",
  "chrono",
  "enigo",
+ "objc2 0.6.4",
+ "objc2-foundation",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

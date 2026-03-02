@@ -4,6 +4,8 @@ use tauri::{
     AppHandle, Manager,
 };
 
+use crate::sidecar::SidecarState;
+
 /// Build and attach the system tray icon with a context menu.
 /// Called during `setup` in `lib.rs`.
 pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -30,6 +32,11 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 "quit" => {
+                    // Kill sidecar synchronously before exit — RunEvent handler
+                    // is not guaranteed to complete on macOS.
+                    if let Some(ss) = app.try_state::<SidecarState>() {
+                        crate::sidecar::shutdown_sidecar(&ss);
+                    }
                     app.exit(0);
                 }
                 _ => {}
