@@ -26,6 +26,8 @@ interface TranscriptionRecord {
 }
 
 
+const DEFAULT_SYSTEM_PROMPT = "You are a text polisher for voice transcription. Clean up the following speech transcription: remove filler words (um, uh, like, you know), fix grammar and punctuation, preserve meaning and tone. IMPORTANT: If the speaker mixes languages (e.g. Chinese with English words/phrases), keep the original language for each part as spoken. Do NOT translate English words into Chinese or vice versa. Preserve code terms, brand names, and technical jargon in their original language. Return ONLY the polished text, no explanations.";
+
 const defaultSettings: SettingsData = {
   stt_provider: "aliyun_dashscope",
   stt_api_key: "",
@@ -36,10 +38,8 @@ const defaultSettings: SettingsData = {
   llm_base_url: "",
   hotkey: "Ctrl+Alt+Space",
   hotkey_mode: "toggle",
-  system_prompt: "",
+  system_prompt: DEFAULT_SYSTEM_PROMPT,
 };
-
-const DEFAULT_SYSTEM_PROMPT = "You are a text polisher for voice transcription. Clean up the following speech transcription: remove filler words (um, uh, like, you know), fix grammar and punctuation, preserve meaning and tone. IMPORTANT: If the speaker mixes languages (e.g. Chinese with English words/phrases), keep the original language for each part as spoken. Do NOT translate English words into Chinese or vice versa. Preserve code terms, brand names, and technical jargon in their original language. Return ONLY the polished text, no explanations.";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -131,15 +131,21 @@ export default function SettingsPage() {
         if (migrated.hotkey === "Alt+Space") {
           migrated.hotkey = "Ctrl+Alt+Space";
         }
+        // Migrate empty system_prompt to default text
+        if (!migrated.system_prompt) {
+          migrated.system_prompt = DEFAULT_SYSTEM_PROMPT;
+        }
         setSettings(migrated);
-        setPromptDraft(migrated.system_prompt || DEFAULT_SYSTEM_PROMPT);
-        // Persist migrated settings if hotkey changed
-        if (saved.hotkey === "Alt+Space") {
+        setPromptDraft(migrated.system_prompt);
+        // Persist migrated settings if anything changed
+        if (saved.hotkey === "Alt+Space" || !saved.system_prompt) {
           await store.set("config", migrated);
           await store.save();
         }
       } else {
         setPromptDraft(DEFAULT_SYSTEM_PROMPT);
+        await store.set("config", defaultSettings);
+        await store.save();
       }
     } catch (e) {
       console.error("Failed to load settings:", e);
@@ -415,8 +421,7 @@ export default function SettingsPage() {
                 <button
                   className="secondary"
                   onClick={() => {
-                    const valueToSave = promptDraft.trim() === DEFAULT_SYSTEM_PROMPT.trim() ? "" : promptDraft;
-                    handleChange("system_prompt", valueToSave);
+                    handleChange("system_prompt", promptDraft);
                     setPromptSaved(true);
                     setTimeout(() => setPromptSaved(false), 2000);
                   }}
