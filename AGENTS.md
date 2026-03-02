@@ -8,7 +8,7 @@ Voice-to-text desktop app — speak naturally, get polished text injected where 
 React/TypeScript frontend + Python sidecar engine (FastAPI).
 
 **Tech stack**: Tauri 2, React 19, TypeScript, Vite 7 (frontend); Rust/tokio (backend); Python 3.12, FastAPI, uvicorn,
-httpx, Pydantic (engine); DashScope/Deepgram (STT), DeepSeek/OpenAI-compatible (LLM).
+httpx, Pydantic (engine); Alibaba Cloud DashScope (STT), DeepSeek/OpenAI-compatible (LLM).
 
 **Purpose**: Desktop app for voice-to-text with push-to-talk hotkey, speech-to-text transcription, LLM polishing, and
 smart text injection at cursor position. Modular provider pattern — STT and LLM providers are independently swappable.
@@ -59,7 +59,7 @@ e2e/              → Playwright GUI tests
 ### Data Flow
 
 - **Record**: Hotkey pressed → Rust state machine → start audio recording via engine
-- **Transcribe**: Audio → STT provider (DashScope/Deepgram) → raw text
+- **Transcribe**: Audio → STT provider (Alibaba Cloud DashScope) → raw text
 - **Polish**: Raw text → LLM provider (DeepSeek/OpenAI-compatible) → polished text
 - **Inject**: Polished text → clipboard → simulate paste at cursor position
 
@@ -130,7 +130,7 @@ e2e/              → Playwright GUI tests
 
 | Rule             | Standard                                                                                       |
 | ---------------- | ---------------------------------------------------------------------------------------------- |
-| Files            | `snake_case.py`. Providers: `{layer}_{name}.py` (e.g., `stt_deepgram.py`, `llm_openai.py`)    |
+| Files            | `snake_case.py`. Providers: `{layer}_{name}.py` (e.g., `stt_aliyun_dashscope.py`, `llm_openai.py`)    |
 | Imports          | `__future__` → stdlib → third-party → relative local. Relative imports within `aurotype_engine` |
 | Types            | Python 3.12 syntax (`str \| None`, `dict[str, str]`). `Protocol` for DI, `override` on impls  |
 | Classes          | `abc.ABC` + `@abstractmethod` for provider bases. Pydantic `BaseSettings` for config           |
@@ -141,7 +141,7 @@ e2e/              → Playwright GUI tests
 | Naming    | Pattern            | Example                              |
 | --------- | ------------------ | ------------------------------------ |
 | Functions | `snake_case`       | `get_quote`, `transcribe`            |
-| Classes   | `PascalCase`       | `DashScopeSTT`, `AudioRecorder`      |
+| Classes   | `PascalCase`       | `AliyunDashScopeSTT`, `AudioRecorder` |
 | Constants | `UPPER_SNAKE_CASE` | `DEFAULT_TIMEOUT`                    |
 | Private   | `_` prefix         | `self._settings`                     |
 

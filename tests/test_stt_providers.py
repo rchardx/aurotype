@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 STTProvider = getattr(
     import_module("aurotype_engine.providers.stt_base"), "STTProvider"
 )
-DashScopeSTTProvider = getattr(
-    import_module("aurotype_engine.providers.stt_dashscope"), "DashScopeSTTProvider"
+AliyunDashScopeSTTProvider = getattr(
+    import_module("aurotype_engine.providers.stt_aliyun_dashscope"), "AliyunDashScopeSTTProvider"
 )
 get_stt_provider = getattr(
     import_module("aurotype_engine.providers.stt_registry"), "get_stt_provider"
@@ -16,7 +16,7 @@ get_stt_provider = getattr(
 
 
 def _build_config() -> SimpleNamespace:
-    return SimpleNamespace(dashscope_api_key="ds-key", stt_model=None)
+    return SimpleNamespace(aliyun_dashscope_api_key="ds-key", stt_model=None)
 
 
 def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
@@ -29,9 +29,9 @@ def _mock_async_client(response: MagicMock) -> tuple[MagicMock, MagicMock]:
     return mock_client, mock_cm
 
 
-def test_registry_returns_dashscope_provider() -> None:
-    provider = get_stt_provider("dashscope", _build_config())
-    assert isinstance(provider, DashScopeSTTProvider)
+def test_registry_returns_aliyun_dashscope_provider() -> None:
+    provider = get_stt_provider("aliyun_dashscope", _build_config())
+    assert isinstance(provider, AliyunDashScopeSTTProvider)
     assert isinstance(provider, STTProvider)
 
 
@@ -43,14 +43,14 @@ def test_registry_raises_for_unknown_provider() -> None:
         assert str(exc) == "Unknown STT provider: unknown"
 
 
-def test_dashscope_default_model() -> None:
-    provider = DashScopeSTTProvider(_build_config())
+def test_aliyun_dashscope_default_model() -> None:
+    provider = AliyunDashScopeSTTProvider(_build_config())
     assert provider._model == "paraformer-realtime-v2"
 
 
-def test_dashscope_custom_model() -> None:
-    config = SimpleNamespace(dashscope_api_key="ds-key", stt_model="paraformer-v2")
-    provider = DashScopeSTTProvider(config)
+def test_aliyun_dashscope_custom_model() -> None:
+    config = SimpleNamespace(aliyun_dashscope_api_key="ds-key", stt_model="paraformer-v2")
+    provider = AliyunDashScopeSTTProvider(config)
     assert provider._model == "paraformer-v2"
 
 
@@ -70,7 +70,7 @@ def _mock_dashscope_modules(mock_recognition_cls: MagicMock) -> dict[str, MagicM
     }
 
 
-def test_dashscope_transcribe_uses_mocked_sdk() -> None:
+def test_aliyun_dashscope_transcribe_uses_mocked_sdk() -> None:
     mock_result = MagicMock()
     mock_result.status_code = 200
     mock_result.get_sentence.return_value = [
@@ -84,7 +84,7 @@ def test_dashscope_transcribe_uses_mocked_sdk() -> None:
 
     modules = _mock_dashscope_modules(mock_recognition_cls)
     with patch.dict(sys.modules, modules):
-        provider = DashScopeSTTProvider(_build_config())
+        provider = AliyunDashScopeSTTProvider(_build_config())
         text = asyncio.run(provider.transcribe(b"wav-bytes", language="zh"))
 
     assert text == "你好世界"
@@ -98,7 +98,7 @@ def test_dashscope_transcribe_uses_mocked_sdk() -> None:
     mock_recognition.call.assert_called_once()
 
 
-def test_dashscope_transcribe_error_raises_runtime_error() -> None:
+def test_aliyun_dashscope_transcribe_error_raises_runtime_error() -> None:
     mock_result = MagicMock()
     mock_result.status_code = 401
     mock_result.message = "Invalid API key"
@@ -109,7 +109,7 @@ def test_dashscope_transcribe_error_raises_runtime_error() -> None:
 
     modules = _mock_dashscope_modules(mock_recognition_cls)
     with patch.dict(sys.modules, modules):
-        provider = DashScopeSTTProvider(_build_config())
+        provider = AliyunDashScopeSTTProvider(_build_config())
         try:
             asyncio.run(provider.transcribe(b"wav-bytes"))
             assert False, "Expected RuntimeError"
@@ -118,7 +118,7 @@ def test_dashscope_transcribe_error_raises_runtime_error() -> None:
             assert "Invalid API key" in str(exc)
 
 
-def test_dashscope_transcribe_empty_result_returns_empty_string() -> None:
+def test_aliyun_dashscope_transcribe_empty_result_returns_empty_string() -> None:
     mock_result = MagicMock()
     mock_result.status_code = 200
     mock_result.get_sentence.return_value = []
@@ -129,7 +129,7 @@ def test_dashscope_transcribe_empty_result_returns_empty_string() -> None:
 
     modules = _mock_dashscope_modules(mock_recognition_cls)
     with patch.dict(sys.modules, modules):
-        provider = DashScopeSTTProvider(_build_config())
+        provider = AliyunDashScopeSTTProvider(_build_config())
         text = asyncio.run(provider.transcribe(b"wav-bytes"))
 
     assert text == ""

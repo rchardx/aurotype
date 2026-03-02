@@ -28,7 +28,7 @@ interface TranscriptionRecord {
 
 
 const defaultSettings: SettingsData = {
-  stt_provider: "dashscope",
+  stt_provider: "aliyun_dashscope",
   stt_api_key: "",
   stt_model: "paraformer-realtime-v2",
   llm_provider: "deepseek",
@@ -328,7 +328,7 @@ export default function SettingsPage() {
             value={settings.stt_provider}
             onChange={(e) => handleChange("stt_provider", e.target.value)}
           >
-            <option value="dashscope">DashScope / Paraformer (Default)</option>
+            <option value="aliyun_dashscope">Alibaba Cloud DashScope / Paraformer (Default)</option>
           </select>
         </div>
         <div className="form-group">

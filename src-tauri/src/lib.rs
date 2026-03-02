@@ -171,7 +171,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let stt_provider = config
         .get("stt_provider")
         .and_then(|v| v.as_str())
-        .unwrap_or("dashscope");
+        .unwrap_or("aliyun_dashscope");
     let stt_api_key = config
         .get("stt_api_key")
         .and_then(|v| v.as_str())
@@ -206,11 +206,11 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         .unwrap_or("");
 
     let mut openai_api_key = String::new();
-    let mut dashscope_api_key = String::new();
+    let mut aliyun_dashscope_api_key = String::new();
     let mut deepseek_api_key = String::new();
 
-    if stt_provider == "dashscope" {
-        dashscope_api_key = stt_api_key.to_string();
+    if stt_provider == "aliyun_dashscope" {
+        aliyun_dashscope_api_key = stt_api_key.to_string();
     }
 
     match llm_provider {
@@ -224,7 +224,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
         "stt_model": if stt_model.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(stt_model.to_string()) },
         "llm_provider": llm_provider,
         "openai_api_key": if openai_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(openai_api_key) },
-        "dashscope_api_key": if dashscope_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(dashscope_api_key) },
+        "aliyun_dashscope_api_key": if aliyun_dashscope_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(aliyun_dashscope_api_key) },
         "deepseek_api_key": if deepseek_api_key.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(deepseek_api_key) },
         "llm_base_url": if llm_base_url.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_base_url.to_string()) },
         "llm_model": if llm_model.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(llm_model.to_string()) },

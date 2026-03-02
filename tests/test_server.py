@@ -27,11 +27,11 @@ def test_configure_endpoint() -> None:
     _config_overrides.clear()
     response = client.post(
         "/configure",
-        json={"stt_provider": "deepgram", "language": "en"},
+        json={"stt_provider": "aliyun_dashscope", "language": "en"},
     )
     assert response.status_code == 200
     assert response.json()["status"] == "configured"
-    assert _config_overrides["stt_provider"] == "deepgram"
+    assert _config_overrides["stt_provider"] == "aliyun_dashscope"
     assert _config_overrides["language"] == "en"
     _config_overrides.clear()
 

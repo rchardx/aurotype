@@ -17,7 +17,7 @@
 ## Features
 
 - 🎤 **Push-to-talk recording** via global hotkey (default: `Ctrl+Alt+Space`)
-- 🗣️ **Speech-to-text** powered by DashScope Paraformer (configurable)
+- 🗣️ **Speech-to-text** powered by Alibaba Cloud DashScope Paraformer (configurable)
 - ✨ **LLM polishing** — cleans up filler words, fixes grammar, preserves mixed-language speech
 - 📋 **Smart paste fallback** — copies text to clipboard when cursor isn't in an editable field
 - 📜 **Recording history** — review and copy past transcriptions
@@ -58,9 +58,9 @@ Most settings are configurable from the in-app Settings page. Alternatively, use
 
 | Variable | Default | Description |
 |---|---|---|
-| `AUROTYPE_STT_PROVIDER` | `dashscope` | Speech-to-text provider |
+| `AUROTYPE_STT_PROVIDER` | `aliyun_dashscope` | Speech-to-text provider |
 | `AUROTYPE_LLM_PROVIDER` | `deepseek` | LLM provider for text polishing |
-| `AUROTYPE_DASHSCOPE_API_KEY` | — | DashScope API key (for STT) |
+| `AUROTYPE_ALIYUN_DASHSCOPE_API_KEY` | — | Alibaba Cloud DashScope API key (for STT) |
 | `AUROTYPE_DEEPSEEK_API_KEY` | — | DeepSeek API key |
 | `AUROTYPE_OPENAI_API_KEY` | — | OpenAI-compatible API key |
 | `AUROTYPE_LLM_BASE_URL` | — | Custom LLM endpoint URL |

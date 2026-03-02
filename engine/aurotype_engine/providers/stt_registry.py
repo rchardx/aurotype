@@ -2,16 +2,16 @@ from collections.abc import Callable
 from typing import Protocol
 
 from .stt_base import STTProvider
-from .stt_dashscope import DashScopeSTTProvider
+from .stt_aliyun_dashscope import AliyunDashScopeSTTProvider
 
 
 class STTConfig(Protocol):
-    dashscope_api_key: str | None
+    aliyun_dashscope_api_key: str | None
     stt_model: str | None
 
 
 STT_PROVIDER_REGISTRY: dict[str, Callable[[STTConfig], STTProvider]] = {
-    "dashscope": DashScopeSTTProvider,
+    "aliyun_dashscope": AliyunDashScopeSTTProvider,
 }
 
 

@@ -8,13 +8,13 @@ from typing import Final, Protocol, override
 from .stt_base import STTProvider
 
 
-class DashScopeSTTProvider(STTProvider):
+class AliyunDashScopeSTTProvider(STTProvider):
     class _Config(Protocol):
-        dashscope_api_key: str | None
+        aliyun_dashscope_api_key: str | None
         stt_model: str | None
 
     def __init__(self, config: _Config):
-        self._api_key: str = config.dashscope_api_key or ""
+        self._api_key: str = config.aliyun_dashscope_api_key or ""
         self._model: str = config.stt_model or "paraformer-realtime-v2"
 
     @override
@@ -33,7 +33,7 @@ class DashScopeSTTProvider(STTProvider):
             from dashscope.audio.asr import Recognition
         except ImportError as exc:
             raise RuntimeError(
-                "dashscope package is required for DashScope STT provider. "
+                "dashscope package is required for Alibaba Cloud DashScope STT provider. "
                 + "Install it with: pip install dashscope"
             ) from exc
 
@@ -68,7 +68,7 @@ class DashScopeSTTProvider(STTProvider):
 
         if result.status_code != HTTPStatus.OK:
             raise RuntimeError(
-                f"DashScope STT failed with status {result.status_code}: {result.message}"
+                f"Alibaba Cloud DashScope STT failed with status {result.status_code}: {result.message}"
             )
 
         sentences = result.get_sentence()

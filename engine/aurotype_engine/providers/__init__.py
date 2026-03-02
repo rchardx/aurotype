@@ -1,9 +1,9 @@
 from .stt_base import STTProvider
-from .stt_dashscope import DashScopeSTTProvider
+from .stt_aliyun_dashscope import AliyunDashScopeSTTProvider
 from .stt_registry import get_stt_provider
 
 __all__ = [
     "STTProvider",
-    "DashScopeSTTProvider",
+    "AliyunDashScopeSTTProvider",
     "get_stt_provider",
 ]

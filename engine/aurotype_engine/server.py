@@ -32,7 +32,7 @@ class ConfigureRequest(BaseModel):
     stt_model: str | None = None
     llm_provider: str | None = None
     openai_api_key: str | None = None
-    dashscope_api_key: str | None = None
+    aliyun_dashscope_api_key: str | None = None
     deepseek_api_key: str | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None

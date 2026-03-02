@@ -14,10 +14,10 @@ from aurotype_engine.pipeline import process_voice_input
 
 def _build_config() -> SimpleNamespace:
     return SimpleNamespace(
-        stt_provider="dashscope",
+        stt_provider="aliyun_dashscope",
         llm_provider="none",
         language="auto",
-        dashscope_api_key="test-key",
+        aliyun_dashscope_api_key="test-key",
         stt_model=None,
     )
 

@@ -7,12 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Load configuration from environment variables with AUROTYPE_ prefix."""
 
-    stt_provider: str = "dashscope"
+    stt_provider: str = "aliyun_dashscope"
     llm_provider: str = "deepseek"
     stt_model: Optional[str] = None
     openai_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
-    dashscope_api_key: Optional[str] = None
+    aliyun_dashscope_api_key: Optional[str] = None
     llm_base_url: Optional[str] = None
     llm_model: Optional[str] = None
     system_prompt: Optional[str] = None

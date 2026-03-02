@@ -11,9 +11,9 @@ from aurotype_engine.config import Settings, get_settings
 
 
 def test_settings_default_stt_provider() -> None:
-    """Settings defaults to dashscope STT provider."""
+    """Settings defaults to aliyun_dashscope STT provider."""
     settings = Settings()
-    assert settings.stt_provider == "dashscope"
+    assert settings.stt_provider == "aliyun_dashscope"
 
 
 def test_settings_default_llm_provider() -> None:
@@ -34,17 +34,11 @@ def test_settings_default_optional_fields_are_none() -> None:
     assert settings.stt_model is None
     assert settings.openai_api_key is None
     assert settings.deepseek_api_key is None
-    assert settings.dashscope_api_key is None
+    assert settings.aliyun_dashscope_api_key is None
     assert settings.llm_base_url is None
     assert settings.llm_model is None
     assert settings.system_prompt is None
 
-
-def test_settings_env_override_stt_provider() -> None:
-    """AUROTYPE_STT_PROVIDER env var overrides default."""
-    with patch.dict(os.environ, {"AUROTYPE_STT_PROVIDER": "deepgram"}):
-        settings = Settings()
-    assert settings.stt_provider == "deepgram"
 
 
 def test_settings_env_override_llm_provider() -> None:
@@ -66,13 +60,13 @@ def test_settings_env_override_api_keys() -> None:
     with patch.dict(
         os.environ,
         {
-            "AUROTYPE_DASHSCOPE_API_KEY": "ds-123",
+            "AUROTYPE_ALIYUN_DASHSCOPE_API_KEY": "ds-123",
             "AUROTYPE_DEEPSEEK_API_KEY": "dk-456",
             "AUROTYPE_OPENAI_API_KEY": "sk-789",
         },
     ):
         settings = Settings()
-    assert settings.dashscope_api_key == "ds-123"
+    assert settings.aliyun_dashscope_api_key == "ds-123"
     assert settings.deepseek_api_key == "dk-456"
     assert settings.openai_api_key == "sk-789"
 
