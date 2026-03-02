@@ -30,7 +30,8 @@
         "skipTaskbar": true,
         "transparent": true,
         "shadow": false,
-        "backgroundColor": "#00000000"
+        "backgroundColor": "#00000000",
+        "resizable": false
       }
     ],
     "security": {

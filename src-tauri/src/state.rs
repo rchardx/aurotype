@@ -56,10 +56,10 @@ pub struct TranscriptionRecord {
 /// Hotkey interaction mode.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum HotkeyMode {
-    /// Hold key to record, release to stop.
-    HoldToRecord,
     /// Press to start recording, press again to stop.
     Toggle,
+    /// Hold key to record, release to stop.
+    HoldToRecord,
 }
 
 /// Managed state wrapper holding the app state and hotkey mode behind a mutex.
@@ -76,7 +76,7 @@ impl AppStateManager {
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(AppState::Idle)),
-            mode: Arc::new(Mutex::new(HotkeyMode::HoldToRecord)),
+            mode: Arc::new(Mutex::new(HotkeyMode::Toggle)),
             current_shortcut: Arc::new(Mutex::new(None)),
             history: Arc::new(Mutex::new(Vec::new())),
             engine_recording: Arc::new(AtomicBool::new(false)),
@@ -194,6 +194,9 @@ impl AppStateManager {
                     let win_height = 96.0;
                     let x = (monitor_size.width as f64 / scale - win_width) / 2.0;
                     let y = monitor_size.height as f64 / scale - win_height - 100.0;
+                    let _ = float_win.set_size(tauri::Size::Logical(
+                        tauri::LogicalSize::new(win_width, win_height),
+                    ));
                     let _ = float_win.set_position(tauri::Position::Logical(
                         tauri::LogicalPosition::new(x, y),
                     ));

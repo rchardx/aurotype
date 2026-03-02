@@ -16,7 +16,6 @@ interface SettingsData {
   llm_base_url: string;
   hotkey: string;
   hotkey_mode: "hold" | "toggle";
-  language: string;
   system_prompt: string;
 }
 interface TranscriptionRecord {
@@ -36,8 +35,7 @@ const defaultSettings: SettingsData = {
   llm_model: "deepseek-chat",
   llm_base_url: "",
   hotkey: "Ctrl+Alt+Space",
-  hotkey_mode: "hold",
-  language: "auto",
+  hotkey_mode: "toggle",
   system_prompt: "",
 };
 
@@ -465,46 +463,26 @@ export default function SettingsPage() {
               <input
                 type="radio"
                 name="hotkey_mode"
-                value="hold"
-                checked={settings.hotkey_mode === "hold"}
-                onChange={() => handleChange("hotkey_mode", "hold")}
-              />
-              Hold to Record
-            </label>
-            <label className="radio-option">
-              <input
-                type="radio"
-                name="hotkey_mode"
                 value="toggle"
                 checked={settings.hotkey_mode === "toggle"}
                 onChange={() => handleChange("hotkey_mode", "toggle")}
               />
               Toggle
             </label>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="hotkey_mode"
+                value="hold"
+                checked={settings.hotkey_mode === "hold"}
+                onChange={() => handleChange("hotkey_mode", "hold")}
+              />
+              Hold to Record
+            </label>
           </div>
         </div>
       </div>
 
-      {/* Language Section */}
-      <div className="section">
-        <div className="section-header">Language</div>
-        <div className="form-group">
-          <label>Interface Language</label>
-          <select
-            value={settings.language}
-            onChange={(e) => handleChange("language", e.target.value)}
-          >
-            <option value="auto">Auto</option>
-            <option value="en">English</option>
-            <option value="zh">Chinese</option>
-            <option value="ja">Japanese</option>
-            <option value="ko">Korean</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-          </select>
-        </div>
-      </div>
     </div>
   );
 }

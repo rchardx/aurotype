@@ -250,13 +250,13 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let hotkey_mode = config
         .get("hotkey_mode")
         .and_then(|v| v.as_str())
-        .unwrap_or("hold");
+        .unwrap_or("toggle");
     {
         let state_manager = app.state::<AppStateManager>();
         let mut mode = state_manager.mode.lock().unwrap();
         *mode = match hotkey_mode {
-            "toggle" => HotkeyMode::Toggle,
-            _ => HotkeyMode::HoldToRecord,
+            "hold" => HotkeyMode::HoldToRecord,
+            _ => HotkeyMode::Toggle,
         };
     }
 
