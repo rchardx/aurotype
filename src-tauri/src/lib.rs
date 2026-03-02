@@ -54,6 +54,15 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
         }
         Ok(Ok(response_text)) => {
             let parsed = serde_json::from_str::<serde_json::Value>(&response_text).ok();
+            // Recording too short — discard without saving to history
+            if parsed.as_ref().and_then(|v| v["too_short"].as_bool()).unwrap_or(false) {
+                eprintln!("[aurotype] Recording too short, discarding");
+                state_mgr.transition(AppState::Error("Recording too short".to_string()), &app);
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                state_mgr.transition(AppState::Idle, &app);
+                return;
+            }
+
             let raw_text = parsed.as_ref()
                 .and_then(|v| v["raw_text"].as_str().map(str::to_string))
                 .unwrap_or_default();
@@ -171,6 +180,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let stt_provider = config
         .get("stt_provider")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("aliyun_dashscope");
     let stt_api_key = config
         .get("stt_api_key")
@@ -179,6 +189,7 @@ async fn sync_settings_internal(app: &tauri::AppHandle) -> Result<(), String> {
     let llm_provider = config
         .get("llm_provider")
         .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
         .unwrap_or("deepseek");
     let llm_api_key = config
         .get("llm_api_key")

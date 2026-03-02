@@ -12,7 +12,7 @@ class DeepSeekLLMProvider(LLMProvider):
         self._client: openai.AsyncOpenAI
         self._client = openai.AsyncOpenAI(
             api_key=config.deepseek_api_key,
-            base_url="https://api.deepseek.com",
+            base_url="https://api.deepseek.com/v1",
             timeout=10.0,
         )
 

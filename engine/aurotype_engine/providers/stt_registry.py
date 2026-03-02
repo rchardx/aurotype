@@ -16,7 +16,10 @@ STT_PROVIDER_REGISTRY: dict[str, Callable[[STTConfig], STTProvider]] = {
 
 
 def get_stt_provider(name: str, config: STTConfig) -> STTProvider:
+    if not name:
+        name = "aliyun_dashscope"
     provider_cls = STT_PROVIDER_REGISTRY.get(name)
     if provider_cls is None:
-        raise ValueError(f"Unknown STT provider: {name}")
+        available = ", ".join(STT_PROVIDER_REGISTRY.keys())
+        raise ValueError(f"Unknown STT provider: '{name}'. Available: {available}")
     return provider_cls(config)

@@ -40,7 +40,7 @@ def test_registry_raises_for_unknown_provider() -> None:
         get_stt_provider("unknown", _build_config())
         assert False, "Expected ValueError"
     except ValueError as exc:
-        assert str(exc) == "Unknown STT provider: unknown"
+        assert "Unknown STT provider" in str(exc)
 
 
 def test_aliyun_dashscope_default_model() -> None:

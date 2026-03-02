@@ -188,7 +188,7 @@ def test_deepseek_provider_uses_hardcoded_base_url() -> None:
     ) as mock_cls:
         DeepSeekLLMProvider(config)
         _, kwargs = mock_cls.call_args
-        assert kwargs["base_url"] == "https://api.deepseek.com"
+        assert kwargs["base_url"] == "https://api.deepseek.com/v1"
 
 
 def test_deepseek_provider_uses_custom_model() -> None:

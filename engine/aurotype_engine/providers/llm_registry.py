@@ -25,7 +25,10 @@ LLM_PROVIDER_REGISTRY: dict[str, Callable[[LLMProviderConfig], LLMProvider]] = {
 
 
 def get_llm_provider(name: str, config: LLMProviderConfig) -> LLMProvider:
+    if not name:
+        name = "deepseek"
     provider_cls = LLM_PROVIDER_REGISTRY.get(name)
     if provider_cls is None:
-        raise ValueError(f"Unknown LLM provider: {name}")
+        available = ", ".join(LLM_PROVIDER_REGISTRY.keys())
+        raise ValueError(f"Unknown LLM provider: '{name}'. Available: {available}")
     return provider_cls(config)

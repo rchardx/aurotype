@@ -19,7 +19,8 @@ _config_overrides: dict[str, str | None] = {}
 
 def get_effective_settings() -> Settings:
     base = get_settings()
-    overrides = {k: v for k, v in _config_overrides.items() if v is not None}
+    # Filter out None and empty strings — treat them as "use default"
+    overrides = {k: v for k, v in _config_overrides.items() if v is not None and v != ""}
     return base.model_copy(update=overrides)
 
 
@@ -130,6 +131,16 @@ async def start_recording():
     return {"status": "recording"}
 
 
+
+def _audio_duration_ms(wav_bytes: bytes) -> float:
+    """Return the duration of a WAV byte string in milliseconds."""
+    import io
+    import wave
+
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav:
+        return wav.getnframes() / wav.getframerate() * 1000
+
+
 @app.post("/record/stop")
 async def stop_recording():
     try:
@@ -137,6 +148,12 @@ async def stop_recording():
     except AudioDeviceError as exc:
         print(f"[aurotype] Audio device error in /record/stop: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Discard recordings shorter than 100ms — likely accidental key taps
+    duration_ms = _audio_duration_ms(audio_bytes)
+    if duration_ms < 100:
+        print(f"[aurotype] Recording too short ({duration_ms:.0f}ms), discarding")
+        return {"too_short": True, "duration_ms": duration_ms}
 
     cfg = get_effective_settings()
     try:
