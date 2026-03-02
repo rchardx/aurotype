@@ -389,9 +389,11 @@ pub fn run() {
             get_audio_data,
         ])
         .setup(|app| {
-            // Request microphone permission before spawning the sidecar so the
-            // system dialog appears immediately, not during the first recording.
+            // Request permissions at startup so system dialogs appear immediately,
+            // not during the first recording. Each function checks whether permission
+            // is already granted before prompting.
             permissions::request_microphone_permission();
+            permissions::prompt_accessibility_permission();
 
             let sidecar_state = sidecar::spawn_sidecar(app.handle().clone())
                 .map_err(|err| std::io::Error::other(format!("failed to spawn sidecar: {err}")))?;
