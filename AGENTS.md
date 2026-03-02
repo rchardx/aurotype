@@ -54,6 +54,7 @@ engine/           → Python 3.12 sidecar (FastAPI + uvicorn)
       llm_registry.py LLM provider registry
 tests/            → Python tests (pytest, unittest.mock)
 e2e/              → Playwright GUI tests
+docs/             → Project documentation (release, architecture)
 ```
 
 ### Data Flow
@@ -83,6 +84,8 @@ e2e/              → Playwright GUI tests
 | Vite config (multi-page)   | `vite.config.ts`                                           |
 | PyInstaller spec           | `engine/aurotype-engine.spec`                              |
 | CI workflow                | `.github/workflows/ci.yml`                                 |
+| Release workflow           | `.github/workflows/release.yml`                            |
+| Release-please config      | `release-please-config.json`                               |
 | Playwright GUI tests       | `e2e/gui-debug.spec.ts`                                    |
 
 <!-- Tier 2: Development Standards — reference when writing code -->
@@ -239,8 +242,13 @@ commit. Never commit broken code.
 
 ## CI & Tooling
 
-**CI/CD**: GitHub Actions (push/PR to `main`): Python tests, TypeScript type check, Rust check + clippy. See
+**CI**: GitHub Actions (push/PR to `main`): Python tests, TypeScript type check, Rust check + clippy. See
 `.github/workflows/ci.yml`.
+
+**Release**: Automated via [release-please](https://github.com/googleapis/release-please). Push to `main` creates a
+Release PR that bumps version across `package.json`, `tauri.conf.json`, `Cargo.toml`, and `pyproject.toml` and
+generates `CHANGELOG.md`. Merging the PR creates a GitHub Release + tag, which triggers a Windows build via
+`tauri-action` that uploads installers as release assets. See `.github/workflows/release.yml` and `docs/release.md`.
 
 **Lint**: No linter/formatter configured. TypeScript strict mode enforced via `tsconfig.json` (`noUnusedLocals`,
 `noUnusedParameters`). Match existing implicit standards.
