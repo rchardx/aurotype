@@ -22,6 +22,40 @@
 - 📋 **Smart paste fallback** — copies text to clipboard when cursor isn't in an editable field
 - 📜 **Recording history** — review and copy past transcriptions
 - 🔌 **OpenAI-compatible LLM** — works with DeepSeek, OpenAI, vLLM, Ollama, LM Studio, etc.
+- 🔒 **Privacy first** — all recordings, transcription history, and settings are stored locally on your machine. Nothing is uploaded except to your configured STT/LLM API endpoints.
+
+## Installation
+
+Aurotype currently supports Windows.
+
+1. Download the latest `.exe` or `.msi` installer from the [GitHub Releases page](https://github.com/rchardx/aurotype/releases). Both options work; pick the one you prefer.
+2. Run the installer and follow the prompts.
+3. Once launched, the app runs in your system tray.
+
+## Quick Start
+
+Follow these steps for your first successful voice transcription:
+
+1. **Launch Aurotype** — The app appears in the system tray (bottom-right). Click the tray icon to open Settings.
+2. **Check Engine Status** — At the top of the Settings page, confirm that "Engine Status" shows **Connected** (green). If it shows disconnected, wait a few seconds for the engine to start.
+3. **Configure STT (Speech-to-Text)** — In the "STT Provider" section:
+   - Provider: Alibaba Cloud DashScope (default).
+   - API Key: Paste your DashScope API key (get one at https://dashscope.console.aliyun.com/).
+   - Model: `paraformer-realtime-v2` (default).
+   - Click **Test Connection** — It should show "Success!".
+4. **Configure LLM (Text Polishing)** — In the "LLM Provider" section:
+   - Provider: DeepSeek (default) or OpenAI Compatible.
+   - If DeepSeek: Paste your DeepSeek API key (get one at https://platform.deepseek.com/).
+   - If OpenAI Compatible: Set your Base URL, API key, and model name (works with OpenAI, vLLM, Ollama, LM Studio, etc.).
+   - Click **Test Connection** — It should show "Success!".
+5. **Try it!** — Press `Ctrl+Alt+Space` (default hotkey), speak naturally, and press `Ctrl+Alt+Space` again to stop. A floating overlay shows the recording status and transcription progress. The polished text is automatically pasted at your cursor position. If no text field is focused, the text is copied to your clipboard.
+
+### Hotkey
+
+- Default: `Ctrl+Alt+Space` (toggle mode — press to start, press again to stop).
+- Alternative mode: "Hold to Record" (hold key to record, release to stop).
+- Change these settings in the Settings → Hotkey section.
+- Available shortcuts: `Ctrl+Alt+Space`, `Ctrl+Shift+Space`, `Ctrl+Shift+A`, `Ctrl+Shift+R`, `Ctrl+Shift+V`, `Ctrl+Space`, `F9`, `F10`.
 
 ## Architecture
 
@@ -33,7 +67,7 @@ engine/           → Python 3.12 sidecar (FastAPI + uvicorn, STT/LLM providers)
 
 Tauri spawns the Python engine as a sidecar process. They communicate over HTTP on localhost (dynamic port).
 
-## Getting Started
+## Building from Source
 
 ### Prerequisites
 
@@ -52,9 +86,9 @@ To run the Python engine standalone: `make engine-dev`
 
 To build a release installer: `bun run tauri build`
 
-## Configuration
+## Configuration (Environment Variables)
 
-Most settings are configurable from the in-app Settings page. Alternatively, use environment variables with the `AUROTYPE_` prefix:
+Most users should configure Aurotype through the in-app Settings page (see Quick Start above). Environment variables are for advanced use or automation. Alternatively, use variables with the `AUROTYPE_` prefix:
 
 | Variable | Default | Description |
 |---|---|---|
