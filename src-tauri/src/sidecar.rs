@@ -81,19 +81,19 @@ fn start_sidecar_process(
                                 }
                             }
                         }
-                        eprintln!(
-                            "[aurotype] Unexpected sidecar stdout before handshake: {line}"
+                        log::warn!(
+                            "Unexpected sidecar stdout before handshake: {line}"
                         );
                         port_tx = Some(tx);
                     }
                 }
                 CommandEvent::Stderr(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes);
-                    eprint!("[aurotype engine] {line}");
+                    log::info!(target: "aurotype_engine", "{}", line.trim_end());
                 }
                 CommandEvent::Terminated(payload) => {
-                    eprintln!(
-                        "[aurotype] Sidecar terminated: code={:?} signal={:?}",
+                    log::warn!(
+                        "Sidecar terminated: code={:?} signal={:?}",
                         payload.code, payload.signal
                     );
                     // If we never got the port, drop the sender so the receiver errors
@@ -101,7 +101,7 @@ fn start_sidecar_process(
                     break;
                 }
                 CommandEvent::Error(err) => {
-                    eprintln!("[aurotype] Sidecar stream error: {err}");
+                    log::error!("Sidecar stream error: {err}");
                 }
                 _ => {}
             }
@@ -115,7 +115,7 @@ fn start_sidecar_process(
     .map_err(|_| "timed out waiting for sidecar handshake (15s)")?
     .map_err(|_| "sidecar exited before emitting port")?;
 
-    eprintln!("[aurotype] Sidecar started on port {port}");
+    log::info!("Sidecar started on port {port}");
 
     {
         let mut child_guard = state.child.lock().unwrap();
@@ -160,7 +160,7 @@ fn start_sidecar_process(
     let port = u16::try_from(raw_port)
         .map_err(|_| std::io::Error::other("sidecar port out of range"))?;
 
-    eprintln!("[aurotype] Sidecar (dev) started on port {port}");
+    log::info!("Sidecar (dev) started on port {port}");
 
     {
         let mut port_guard = state.port.lock().unwrap();
@@ -256,8 +256,8 @@ fn start_health_check_loop(app: AppHandle, state: SidecarState) {
                     let _ = app.emit("sidecar-status", serde_json::json!({"healthy": false}));
 
                     if consecutive_failures >= 3 {
-                        eprintln!(
-                            "[aurotype] Sidecar health check failed {consecutive_failures} times, respawning..."
+                        log::warn!(
+                            "Sidecar health check failed {consecutive_failures} times, respawning..."
                         );
                         let _ = app.emit(
                             "sidecar-restarting",
@@ -297,7 +297,7 @@ fn stop_current_sidecar(state: &SidecarState) {
 
     if let Some(child) = maybe_child {
         let pid = child.pid();
-        eprintln!("[aurotype] Stopping sidecar (pid={pid})");
+        log::info!("Stopping sidecar (pid={pid})");
 
         // Collect child PIDs before killing the parent process.
         // PyInstaller onefile mode spawns a child process; once the parent

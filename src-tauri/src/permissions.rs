@@ -11,7 +11,7 @@ pub fn request_microphone_permission() {
 
     unsafe {
         let Some(cls) = AnyClass::get(c"AVCaptureDevice") else {
-            eprintln!("[aurotype] AVCaptureDevice class not found");
+            log::error!("AVCaptureDevice class not found");
             return;
         };
 
@@ -24,12 +24,12 @@ pub fn request_microphone_permission() {
 
         match status {
             0 => {
-                eprintln!("[aurotype] Microphone permission not determined, requesting…");
+                log::info!("Microphone permission not determined, requesting…");
                 let handler = StackBlock::new(|granted: Bool| {
                     if granted.as_bool() {
-                        eprintln!("[aurotype] Microphone permission granted");
+                        log::info!("Microphone permission granted");
                     } else {
-                        eprintln!("[aurotype] Microphone permission denied by user");
+                        log::warn!("Microphone permission denied by user");
                     }
                 });
                 let _: () = msg_send![
@@ -39,16 +39,16 @@ pub fn request_microphone_permission() {
                 ];
             }
             2 => {
-                eprintln!(
-                    "[aurotype] Microphone permission denied. \
+                log::warn!(
+                    "Microphone permission denied. \
                      Grant access in System Settings → Privacy & Security → Microphone."
                 );
             }
             3 => {
-                eprintln!("[aurotype] Microphone permission already granted");
+                log::info!("Microphone permission already granted");
             }
             other => {
-                eprintln!("[aurotype] Microphone authorization status: {other}");
+                log::info!("Microphone authorization status: {other}");
             }
         }
     }
@@ -125,8 +125,8 @@ pub fn prompt_accessibility_permission() {
             CFRelease(options);
         }
 
-        eprintln!(
-            "[aurotype] Accessibility permission not granted. \
+        log::warn!(
+            "Accessibility permission not granted. \
              Grant access in System Settings \u{2192} Privacy & Security \u{2192} Accessibility."
         );
     }

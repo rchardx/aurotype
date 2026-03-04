@@ -1,5 +1,6 @@
 mod hotkey;
 mod injection;
+mod logging;
 mod permissions;
 mod sidecar;
 mod state;
@@ -24,7 +25,7 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
     let wait_start = tokio::time::Instant::now();
     while !engine_recording.load(Ordering::SeqCst) {
         if wait_start.elapsed() > Duration::from_secs(5) {
-            eprintln!("[aurotype] Timed out waiting for engine to start recording");
+            log::error!("Timed out waiting for engine to start recording");
             state_mgr.transition(AppState::Error("Recording failed to start".to_string()), &app);
             tokio::time::sleep(Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app);
@@ -41,13 +42,13 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
 
     match result {
         Err(_elapsed) => {
-            eprintln!("[aurotype] Pipeline timeout: /record/stop exceeded 60s");
+            log::error!("Pipeline timeout: /record/stop exceeded 60s");
             state_mgr.transition(AppState::Error("Request timed out".to_string()), &app);
             tokio::time::sleep(Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app);
         }
         Ok(Err(e)) => {
-            eprintln!("[aurotype] Pipeline error: {e}");
+            log::error!("Pipeline error: {e}");
             state_mgr.transition(AppState::Error(format!("Pipeline failed: {e}")), &app);
             tokio::time::sleep(Duration::from_secs(3)).await;
             state_mgr.transition(AppState::Idle, &app);
@@ -56,8 +57,17 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
             let parsed = serde_json::from_str::<serde_json::Value>(&response_text).ok();
             // Recording too short — discard without saving to history
             if parsed.as_ref().and_then(|v| v["too_short"].as_bool()).unwrap_or(false) {
-                eprintln!("[aurotype] Recording too short, discarding");
+                log::info!("Recording too short, discarding");
                 state_mgr.transition(AppState::Error("Recording too short".to_string()), &app);
+                tokio::time::sleep(Duration::from_secs(3)).await;
+                state_mgr.transition(AppState::Idle, &app);
+                return;
+            }
+
+            // Silent recording — nothing was spoken
+            if parsed.as_ref().and_then(|v| v["silent"].as_bool()).unwrap_or(false) {
+                log::info!("Recording is silent, discarding");
+                state_mgr.transition(AppState::Error("No speech detected".to_string()), &app);
                 tokio::time::sleep(Duration::from_secs(3)).await;
                 state_mgr.transition(AppState::Idle, &app);
                 return;
@@ -85,7 +95,7 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 match save_audio_file(&app, &b64, &timestamp) {
                     Ok(path) => Some(path),
                     Err(e) => {
-                        eprintln!("[aurotype] Failed to save audio: {e}");
+                        log::error!("Failed to save audio: {e}");
                         None
                     }
                 }
@@ -103,14 +113,14 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
 
             let current_state = state_mgr.get();
             if current_state == AppState::Idle {
-                eprintln!("[aurotype] Pipeline result ignored: request was cancelled");
+                log::info!("Pipeline result ignored: request was cancelled");
                 return;
             }
 
             state_mgr.transition(AppState::Injecting, &app);
             let current_state = state_mgr.get();
             if current_state == AppState::Idle {
-                eprintln!("[aurotype] Injection skipped: request was cancelled");
+                log::info!("Injection skipped: request was cancelled");
                 return;
             }
 
@@ -122,7 +132,7 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 let result = injection::inject_text(&polished_for_inject);
                 let _ = tx.send(result);
             }) {
-                eprintln!("[aurotype] Failed to dispatch injection to main thread: {e}");
+                log::error!("Failed to dispatch injection to main thread: {e}");
                 state_mgr.transition(AppState::CopyAvailable(polished), &app);
                 return;
             }
@@ -131,7 +141,7 @@ pub async fn run_pipeline(app: tauri::AppHandle) {
                 Err(_) => Err("injection channel closed".to_string()),
             };
             if let Err(e) = inject_result {
-                eprintln!("[aurotype] Injection error (offering copy): {e}");
+                log::warn!("Injection error (offering copy): {e}");
                 state_mgr.transition(AppState::CopyAvailable(polished), &app);
                 return;
             }
@@ -164,7 +174,7 @@ fn save_audio_file(app: &tauri::AppHandle, b64_data: &str, timestamp: &str) -> R
     fs::write(&filepath, &bytes).map_err(|e| format!("write wav: {e}"))?;
 
     let path_str = filepath.to_string_lossy().to_string();
-    eprintln!("[aurotype] Saved audio recording: {path_str} ({} bytes)", bytes.len());
+    log::info!("Saved audio recording: {path_str} ({} bytes)", bytes.len());
     Ok(path_str)
 }
 
@@ -400,6 +410,8 @@ pub fn run() {
             get_audio_data,
         ])
         .setup(|app| {
+            logging::init(app.handle());
+
             // Request permissions at startup so system dialogs appear immediately,
             // not during the first recording. Each function checks whether permission
             // is already granted before prompting.

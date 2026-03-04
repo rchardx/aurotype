@@ -54,7 +54,7 @@ pub fn register_hotkeys(app: &AppHandle) -> Result<(), Box<dyn std::error::Error
         *state_manager.current_shortcut.lock().unwrap() = Some(main_shortcut);
     }
 
-    eprintln!("[aurotype] Hotkeys registered: main={main_shortcut:?}, escape=Escape");
+    log::info!("Hotkeys registered: main={main_shortcut:?}, escape=Escape");
     Ok(())
 }
 
@@ -79,7 +79,12 @@ fn handle_main_hotkey(
                     AppState::Recording => {
                         stop_recording(manager, app);
                     }
-                    // Ignore hotkey in other states
+                    // CopyAvailable/Error: user re-pressed hotkey, reset and start recording
+                    AppState::CopyAvailable(_) | AppState::Error(_) => {
+                        manager.transition(AppState::Idle, app);
+                        start_recording(manager, app);
+                    }
+                    // Ignore hotkey in other states (Processing, Injecting)
                     _ => {}
                 }
             }
@@ -87,8 +92,15 @@ fn handle_main_hotkey(
         HotkeyMode::HoldToRecord => {
             match shortcut_state {
                 ShortcutState::Pressed => {
-                    if current == AppState::Idle {
-                        start_recording(manager, app);
+                    match current {
+                        AppState::Idle => {
+                            start_recording(manager, app);
+                        }
+                        AppState::CopyAvailable(_) | AppState::Error(_) => {
+                            manager.transition(AppState::Idle, app);
+                            start_recording(manager, app);
+                        }
+                        _ => {}
                     }
                 }
                 ShortcutState::Released => {
@@ -116,7 +128,7 @@ fn start_recording(manager: &AppStateManager, app: &AppHandle) {
             }
             Err(err) => {
                 let state_mgr = app_clone.state::<AppStateManager>();
-                eprintln!("[aurotype] Failed to start recording: {err}");
+                log::error!("Failed to start recording: {err}");
                 let err_lower = err.to_lowercase();
                 let error_msg = if err_lower.contains("audiodeviceerror")
                     || err_lower.contains("no default input device")
@@ -155,11 +167,14 @@ fn handle_escape(manager: &AppStateManager, app: &AppHandle) {
                     sidecar::sidecar_post(&sidecar_state, "/record/cancel", serde_json::json!({}))
                         .await
                 {
-                    eprintln!("[aurotype] Failed to cancel recording: {err}");
+                    log::error!("Failed to cancel recording: {err}");
                 }
             });
         }
         AppState::Processing => {
+            manager.transition(AppState::Idle, app);
+        }
+        AppState::CopyAvailable(_) | AppState::Error(_) => {
             manager.transition(AppState::Idle, app);
         }
         _ => {}
@@ -243,7 +258,7 @@ pub fn update_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
         let current = state_manager.current_shortcut.lock().unwrap();
         if let Some(ref current_shortcut) = *current {
             if *current_shortcut == new_shortcut {
-                eprintln!("[aurotype] Hotkey unchanged: {shortcut}");
+                log::info!("Hotkey unchanged: {shortcut}");
                 return Ok(());
             }
         }
@@ -253,7 +268,7 @@ pub fn update_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
     let old = state_manager.current_shortcut.lock().unwrap().take();
     if let Some(old_shortcut) = old {
         if let Err(e) = app.global_shortcut().unregister(old_shortcut) {
-            eprintln!("[aurotype] Failed to unregister old hotkey: {e}");
+            log::warn!("Failed to unregister old hotkey: {e}");
         }
     }
 
@@ -274,7 +289,7 @@ pub fn update_hotkey(app: AppHandle, shortcut: String) -> Result<(), String> {
     }
 
     *state_manager.current_shortcut.lock().unwrap() = Some(new_shortcut);
-    eprintln!("[aurotype] Hotkey changed to: {shortcut}");
+    log::info!("Hotkey changed to: {shortcut}");
     Ok(())
 }
 

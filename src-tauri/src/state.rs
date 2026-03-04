@@ -129,16 +129,16 @@ impl AppStateManager {
                         Ok(records) => {
                             let mut history = self.history.lock().unwrap();
                             *history = records;
-                            eprintln!("[aurotype] Loaded {} history records from disk", history.len());
+                            log::info!("Loaded {} history records from disk", history.len());
                         }
                         Err(e) => {
-                            eprintln!("[aurotype] Failed to parse history: {e}");
+                            log::error!("Failed to parse history: {e}");
                         }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("[aurotype] Failed to open history store: {e}");
+                log::error!("Failed to open history store: {e}");
             }
         }
     }
@@ -151,11 +151,11 @@ impl AppStateManager {
                 let val = serde_json::to_value(&records).unwrap_or_default();
                 store.set("records", val);
                 if let Err(e) = store.save() {
-                    eprintln!("[aurotype] Failed to save history to disk: {e}");
+                    log::error!("Failed to save history to disk: {e}");
                 }
             }
             Err(e) => {
-                eprintln!("[aurotype] Failed to open history store for saving: {e}");
+                log::error!("Failed to open history store for saving: {e}");
             }
         }
     }
@@ -166,7 +166,7 @@ impl AppStateManager {
             let p = std::path::Path::new(path);
             if p.exists() {
                 if let Err(e) = std::fs::remove_file(p) {
-                    eprintln!("[aurotype] Failed to delete audio file {path}: {e}");
+                    log::error!("Failed to delete audio file {path}: {e}");
                 }
             }
         }
@@ -194,12 +194,11 @@ impl AppStateManager {
                     let win_height = 96.0;
                     let x = (monitor_size.width as f64 / scale - win_width) / 2.0;
                     let y = monitor_size.height as f64 / scale - win_height - 100.0;
-                    let _ = float_win.set_size(tauri::Size::Logical(
-                        tauri::LogicalSize::new(win_width, win_height),
-                    ));
-                    let _ = float_win.set_position(tauri::Position::Logical(
-                        tauri::LogicalPosition::new(x, y),
-                    ));
+                    let _ = float_win.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
+                        win_width, win_height,
+                    )));
+                    let _ = float_win
+                        .set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
                 }
                 let _ = float_win.show();
                 let _ = float_win.set_always_on_top(true);
@@ -323,7 +322,9 @@ mod tests {
     #[test]
     fn new_manager_engine_recording_is_false() {
         let manager = AppStateManager::new();
-        assert!(!manager.engine_recording.load(std::sync::atomic::Ordering::SeqCst));
+        assert!(!manager
+            .engine_recording
+            .load(std::sync::atomic::Ordering::SeqCst));
     }
 
     // --- AppStateManager::get tests ---

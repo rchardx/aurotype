@@ -40,6 +40,7 @@ src-tauri/src/    → Rust/Tauri 2 backend
   hotkey.rs         Hotkey handling
   sidecar.rs        Python sidecar lifecycle
   injection.rs      Text injection (clipboard)
+  logging.rs        Logging setup (file + stderr)
   tray.rs           System tray
 engine/           → Python 3.12 sidecar (FastAPI + uvicorn)
   aurotype_engine/
@@ -73,6 +74,7 @@ docs/             → Project documentation (release, architecture)
 | Hotkey handling            | `src-tauri/src/hotkey.rs`                                  |
 | Python sidecar lifecycle   | `src-tauri/src/sidecar.rs`                                 |
 | Text injection (clipboard) | `src-tauri/src/injection.rs`                               |
+| Logging setup              | `src-tauri/src/logging.rs`                                 |
 | FastAPI server             | `engine/aurotype_engine/server.py`                         |
 | Voice pipeline (STT→LLM)  | `engine/aurotype_engine/pipeline.py`                       |
 | Audio recording            | `engine/aurotype_engine/audio.py`                          |
@@ -152,10 +154,10 @@ docs/             → Project documentation (release, architecture)
 
 | Rule    | Standard                                                                                               |
 | ------- | ------------------------------------------------------------------------------------------------------ |
-| Modules | One file per concern (`state.rs`, `hotkey.rs`, `sidecar.rs`, `injection.rs`, `tray.rs`), in `lib.rs`  |
+| Modules | One file per concern (`state.rs`, `hotkey.rs`, `sidecar.rs`, `injection.rs`, `tray.rs`, `logging.rs`), in `lib.rs` |
 | Imports | std → external crates → `crate::` local modules                                                       |
 | Errors  | `Result<T, String>` for `#[tauri::command]`. `Result<(), Box<dyn std::error::Error>>` internally       |
-| Logging | `eprintln!("[aurotype] ...")`                                                                          |
+| Logging | `log` crate macros (`log::info!`, `log::warn!`, `log::error!`). File + stderr via `simplelog`. Logs at `<app_data>/logs/aurotype-YYYY-MM-DD.log`. No `[aurotype]` prefix — module path is automatic. |
 | Patterns | `Arc<Mutex<T>>` for shared state, `tokio::spawn` for async tasks, `#[cfg(target_os)]` for platform   |
 | Naming  | `snake_case` functions, `PascalCase` structs/enums                                                     |
 
