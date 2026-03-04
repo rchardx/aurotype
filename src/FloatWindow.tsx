@@ -42,6 +42,7 @@ export default function FloatWindow() {
   const startTimeRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
   const volumeIntervalRef = useRef<number | null>(null);
+  const copyDismissRef = useRef<number | null>(null);
 
   // Initial setup: hide window on mount if idle
   useEffect(() => {
@@ -116,7 +117,13 @@ export default function FloatWindow() {
 
       // Special handling for copy_available - ensure window is visible and sized correctly
       if (newState === 'copy_available') {
-        // No auto-dismiss, no timer
+        copyDismissRef.current = window.setTimeout(async () => {
+          copyDismissRef.current = null;
+          await invoke('cancel');
+        }, 2000);
+      } else if (copyDismissRef.current !== null) {
+        clearTimeout(copyDismissRef.current);
+        copyDismissRef.current = null;
       }
 
       if (newState === 'error') {
@@ -176,8 +183,12 @@ export default function FloatWindow() {
   };
 
   const handleCopy = async () => {
+    if (copyDismissRef.current !== null) {
+      clearTimeout(copyDismissRef.current);
+      copyDismissRef.current = null;
+    }
     await invoke('copy_to_clipboard', { text: copyText });
-    handleStateChange('idle');
+    await invoke('cancel');
   };
 
   return (
