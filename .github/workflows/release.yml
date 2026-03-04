@@ -15,6 +15,8 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       release_id: ${{ steps.release.outputs.id }}
       tag_name: ${{ steps.release.outputs.tag_name }}
+      prs_created: ${{ steps.release.outputs.prs_created }}
+      pr_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName || '' }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -22,6 +24,37 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  sync-cargo-lock:
+    needs: release-please
+    if: needs.release-please.outputs.prs_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.pr_branch }}
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update Cargo.lock
+        run: cargo update --workspace
+        working-directory: src-tauri
+
+      - name: Commit Cargo.lock if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Cargo.lock already up to date"
+          else
+            git commit -m "chore: sync Cargo.lock version"
+            git push
+          fi
 
   build-windows:
     needs: release-please

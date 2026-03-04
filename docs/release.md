@@ -7,7 +7,9 @@ Aurotype uses [release-please](https://github.com/googleapis/release-please) for
 ```
 push to main
   → release-please creates/updates a Release PR
-    (bumps version, generates CHANGELOG.md)
+    (bumps version in package.json, Cargo.toml, tauri.conf.json, pyproject.toml,
+     generates CHANGELOG.md)
+  → sync-cargo-lock updates Cargo.lock on the PR branch
   → merge the Release PR
     → GitHub Release + tag (e.g. v0.2.0) created automatically
       → Windows build triggered
@@ -54,11 +56,11 @@ While the project is pre-1.0 (`0.x.y`), breaking changes bump minor and features
 | -------------------------------- | ---------------------------------------------------- |
 | `release-please-config.json`     | Release-please settings, extra-files for version sync |
 | `.release-please-manifest.json`  | Current version tracker (updated by release-please)   |
-| `.github/workflows/release.yml`  | Combined workflow: release-please + Windows build     |
+| `.github/workflows/release.yml`  | Combined workflow: release-please + Cargo.lock sync + Windows build |
 
 ## Build Pipeline
 
-The release workflow (`.github/workflows/release.yml`) runs in two stages:
+The release workflow (`.github/workflows/release.yml`) runs in three stages:
 
 ### Stage 1: release-please
 
@@ -66,7 +68,15 @@ The release workflow (`.github/workflows/release.yml`) runs in two stages:
 - Creates or updates a Release PR with version bump + CHANGELOG
 - When the Release PR is merged, creates a GitHub Release and outputs `release_id`
 
-### Stage 2: build-windows
+### Stage 2: sync-cargo-lock
+
+- **Only runs when a Release PR is created or updated** (conditional on stage 1)
+- Checks out the Release PR branch
+- Runs `cargo update --workspace` to sync `src-tauri/Cargo.lock` with the updated `Cargo.toml` version
+- Commits and pushes the updated lockfile back to the PR branch
+- This is needed because release-please updates `Cargo.toml` version but cannot update `Cargo.lock`
+
+### Stage 3: build-windows
 
 - **Only runs when a release is created** (conditional on stage 1)
 - Builds the Python sidecar via PyInstaller (onefile mode)
