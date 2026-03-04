@@ -136,3 +136,48 @@ def test_base64_audio_encoding_in_result() -> None:
 
     decoded = base64.b64decode(result["audio_data"])
     assert decoded == audio
+
+
+def test_empty_transcription_skips_llm() -> None:
+    """When STT returns empty text (silence), LLM should not be called."""
+    audio = b"silent-audio"
+    config = _build_config()
+
+    mock_stt = MagicMock()
+    mock_stt.transcribe = AsyncMock(return_value="")
+
+    mock_llm = MagicMock()
+    mock_llm.polish = AsyncMock(return_value="should not be called")
+
+    with (
+        patch("aurotype_engine.pipeline.get_stt_provider", return_value=mock_stt),
+        patch("aurotype_engine.pipeline.get_llm_provider", return_value=mock_llm),
+    ):
+        result = asyncio.run(process_voice_input(audio, config))
+
+    assert result["raw_text"] == ""
+    assert result["polished_text"] == ""
+    assert result["audio_data"] == base64.b64encode(audio).decode("ascii")
+    mock_llm.polish.assert_not_awaited()
+
+
+def test_whitespace_transcription_skips_llm() -> None:
+    """When STT returns only whitespace, treat as empty and skip LLM."""
+    audio = b"silent-audio"
+    config = _build_config()
+
+    mock_stt = MagicMock()
+    mock_stt.transcribe = AsyncMock(return_value="   \n  ")
+
+    mock_llm = MagicMock()
+    mock_llm.polish = AsyncMock(return_value="should not be called")
+
+    with (
+        patch("aurotype_engine.pipeline.get_stt_provider", return_value=mock_stt),
+        patch("aurotype_engine.pipeline.get_llm_provider", return_value=mock_llm),
+    ):
+        result = asyncio.run(process_voice_input(audio, config))
+
+    assert result["raw_text"] == ""
+    assert result["polished_text"] == ""
+    mock_llm.polish.assert_not_awaited()

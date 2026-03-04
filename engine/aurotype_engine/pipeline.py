@@ -43,6 +43,14 @@ async def process_voice_input(audio_bytes: bytes, config: Settings) -> dict[str,
             f"STT failed after {_MAX_STT_RETRIES} attempts: {last_error}"
         ) from last_error
 
+    # Nothing was spoken — skip LLM and return empty results
+    if not raw_text.strip():
+        return {
+            "raw_text": "",
+            "polished_text": "",
+            "audio_data": base64.b64encode(audio_bytes).decode("ascii"),
+        }
+
     llm = get_llm_provider(config.llm_provider, config)
     polished_text = await llm.polish(raw_text, language=config.language)
 

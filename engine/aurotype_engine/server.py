@@ -141,6 +141,21 @@ def _audio_duration_ms(wav_bytes: bytes) -> float:
         return wav.getnframes() / wav.getframerate() * 1000
 
 
+def _is_silent(wav_bytes: bytes, threshold: float = 0.005) -> bool:
+    """Return True if the RMS volume of the WAV is below *threshold* (silence)."""
+    import io
+    import wave
+
+    import numpy as np
+
+    with wave.open(io.BytesIO(wav_bytes), "rb") as wav:
+        frames = wav.readframes(wav.getnframes())
+    samples = np.frombuffer(frames, dtype=np.int16).astype(np.float32)
+    if samples.size == 0:
+        return True
+    rms = float(np.sqrt(np.mean(samples * samples)) / 32768.0)
+    return rms < threshold
+
 @app.post("/record/stop")
 async def stop_recording():
     try:
@@ -154,6 +169,11 @@ async def stop_recording():
     if duration_ms < 100:
         print(f"[aurotype] Recording too short ({duration_ms:.0f}ms), discarding")
         return {"too_short": True, "duration_ms": duration_ms}
+
+    # Discard silent recordings — nothing was spoken
+    if _is_silent(audio_bytes):
+        print("[aurotype] Recording is silent, discarding")
+        return {"silent": True}
 
     cfg = get_effective_settings()
     try:

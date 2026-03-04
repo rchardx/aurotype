@@ -1,16 +1,31 @@
 # pyright: reportMissingImports=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportAny=false
 
+import io
+import struct
 import sys
+import wave
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 
-from aurotype_engine.server import app, _config_overrides
+from aurotype_engine.server import app, _config_overrides, _is_silent
 
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
+
+
+def _make_wav(samples: list[int], sample_rate: int = 16000) -> bytes:
+    """Create a WAV file bytes from a list of 16-bit signed samples."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)  # 16-bit
+        wav.setframerate(sample_rate)
+        raw = struct.pack(f"<{len(samples)}h", *samples)
+        wav.writeframes(raw)
+    return buf.getvalue()
 
 
 def test_health_endpoint() -> None:
@@ -88,3 +103,42 @@ def test_process_endpoint() -> None:
     assert data["raw_text"] == "raw"
     assert data["polished_text"] == "polished"
     assert data["audio_data"] == "base64data"
+
+
+# --- _is_silent tests ---
+
+
+def test_is_silent_returns_true_for_silent_audio() -> None:
+    """Audio with very low amplitude is detected as silent."""
+    # All zeros = complete silence
+    silent_wav = _make_wav([0, 0, 0, 0, 0])
+    assert _is_silent(silent_wav) is True
+
+
+def test_is_silent_returns_true_for_very_quiet_audio() -> None:
+    """Audio with RMS below threshold is detected as silent."""
+    # Small values: RMS ~ 0.00003, well below default threshold 0.005
+    quiet_wav = _make_wav([1, -1, 2, -2, 1])
+    assert _is_silent(quiet_wav) is True
+
+
+def test_is_silent_returns_false_for_loud_audio() -> None:
+    """Audio with RMS above threshold is not silent."""
+    # Large values: RMS ~ 0.5, well above threshold
+    loud_wav = _make_wav([16000, -16000, 16000, -16000])
+    assert _is_silent(loud_wav) is False
+
+
+def test_is_silent_returns_true_for_empty_samples() -> None:
+    """WAV with no samples is treated as silent."""
+    empty_wav = _make_wav([])
+    assert _is_silent(empty_wav) is True
+
+
+def test_is_silent_respects_custom_threshold() -> None:
+    """Custom threshold can make quiet audio non-silent."""
+    quiet_wav = _make_wav([100, -100, 100, -100])
+    # Default threshold 0.005: quiet_wav is silent
+    assert _is_silent(quiet_wav) is True
+    # Lower threshold: same audio is not silent
+    assert _is_silent(quiet_wav, threshold=0.001) is False
