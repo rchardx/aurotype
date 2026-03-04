@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/rchardx/aurotype/compare/v0.1.1...v0.2.0) (2026-03-04)
+
+
+### Features
+
+* **engine:** detect and discard silent recordings ([971381d](https://github.com/rchardx/aurotype/commit/971381d8bc157fcf904c490d413814b19d7a83c1))
+* **frontend:** auto-dismiss copy button after 2 seconds ([b97858f](https://github.com/rchardx/aurotype/commit/b97858f67b5a0ab8f2f7d91e891403371985eb78))
+* **tauri:** add structured logging system with file and stderr output ([b52ab5b](https://github.com/rchardx/aurotype/commit/b52ab5bddc310d4751ec18c1f1659523033e13d9))
+* **tauri:** detect text input focus on Windows via UI Automation ([a0229ac](https://github.com/rchardx/aurotype/commit/a0229acea5e5c8739cee9bfa7b770527570e023c))
+
+
+### Bug Fixes
+
+* **engine:** disable parent PID monitoring on Windows ([25a51c9](https://github.com/rchardx/aurotype/commit/25a51c9c2e68f4aed5c12a7d5e759547b1ea4369))
+* **tauri:** add log, simplelog, and windows crate dependencies to Cargo.toml ([8c3b1f6](https://github.com/rchardx/aurotype/commit/8c3b1f60e4fad0044e03842ef4db541494047962))
+
 ## [0.1.1](https://github.com/rchardx/aurotype/compare/v0.1.0...v0.1.1) (2026-03-02)
 
 
